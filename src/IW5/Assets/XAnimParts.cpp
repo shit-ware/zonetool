@@ -36,7 +36,7 @@ namespace ZoneTool
 
 			for (auto i = 0; i < anim->boneCount[9]; i++)
 			{
-				anim->tagnames[i] = SL_AllocString(FileSystem::ReadString(file, mem.get()));
+				anim->tagnames[i] = allocString(FileSystem::ReadString(file, mem.get()));
 			}
 
 			if (FileSystem::ReadInt(file))
@@ -48,7 +48,7 @@ namespace ZoneTool
 					fread(&anim->notetracks[i], sizeof(XAnimNotifyInfo), 1, file);
 
 					const char* str = FileSystem::ReadString(file, mem.get());
-					anim->notetracks[i].name = SL_AllocString(str);
+					anim->notetracks[i].name = allocString(str);
 				}
 			}
 
@@ -162,52 +162,10 @@ namespace ZoneTool
 				}
 			}
 
-			//if (asset->delta)
-			//{
-			//	asset->delta = reader.Single<XAnimDeltaPart>();
-
-			//	if (asset->delta->trans)
-			//	{
-			//		asset->delta->trans = mem->ManualAlloc<XAnimPartTrans>(sizeof(XAnimPartTrans) + ((asset->framecount > 255) ? asset->delta->trans->size * 2 : asset->delta->trans->size) + 1);
-			//		auto transData = reader.Single<XAnimPartTrans>();
-			//		memcpy(asset->delta->trans, transData, sizeof(XAnimPartTrans));
-
-			//		/*if (asset->delta->trans->size)
-			//		{
-			//			if (asset->framecount > 255)
-			//			{
-			//				dump.Array(asset->delta->trans->u.frames.indices._2, asset->delta->trans->size + 1);
-			//			}
-			//			else
-			//			{
-			//				dump.Array(asset->delta->trans->u.frames.indices._1, asset->delta->trans->size + 1);
-			//			}*/
-
-			//		if(asset->delta->trans->size)
-			//		{
-			//			if (asset->framecount > 255)
-			//			{
-			//				auto partData = reader.Array<short>();
-			//				memcpy(asset->delta->trans->u.frames.indices._2, partData, (asset->delta->trans->size * 2) + 1);
-			//			}
-			//			else
-			//			{
-			//				auto partData = reader.Array<char>();
-			//				memcpy(asset->delta->trans->u.frames.indices._1, partData, asset->delta->trans->size + 1);
-			//			}
-			//		}
-			//	}
-
-			//	if (asset->delta->quat2)
-			//	{
-
-			//	}
-
-			//	if (asset->delta->quat)
-			//	{
-
-			//	}
-			//}
+			if (asset->delta)
+			{
+				asset->delta = nullptr;
+			}
 
 			reader.Close();
 

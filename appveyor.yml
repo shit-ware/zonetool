@@ -1,8 +1,9 @@
 version: 1.0.{build}
+skip_tags: true
 image: Visual Studio 2019
 configuration: release
 before_build:
-- ps: ./generate.bat
+- ps: tools\premake5.exe vs2019 --set-version="$env:APPVEYOR_BUILD_VERSION"
 build:
   project: build/zonetool.sln
   verbosity: minimal
