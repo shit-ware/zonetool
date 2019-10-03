@@ -76,6 +76,7 @@ workspace "zonetool"
 		dependson "IW3"
 		dependson "IW4"
 		dependson "IW5"
+		dependson "CODO"
 
 		pchheader "stdafx.hpp"
 		pchsource "src/ZoneTool/stdafx.cpp"
@@ -90,6 +91,7 @@ workspace "zonetool"
 			"IW3-%{cfg.platform}-%{cfg.buildcfg}",
 			"IW4-%{cfg.platform}-%{cfg.buildcfg}",
 			"IW5-%{cfg.platform}-%{cfg.buildcfg}",
+			"CODO-%{cfg.platform}-%{cfg.buildcfg}",
 			"ZoneUtils-%{cfg.platform}-%{cfg.buildcfg}",
 			"steam_api",
 			"tomcrypt",
@@ -215,7 +217,7 @@ workspace "zonetool"
 	project "IW5"
 		kind "StaticLib"
 		language "C++"
-		
+
 		pchheader "stdafx.hpp"
 		pchsource "src/IW5/stdafx.cpp"
 
@@ -235,6 +237,38 @@ workspace "zonetool"
 			"%{prj.location}/src",
 			"./src/ZoneTool",
 			"./src/ZoneUtils",
+			"./src/IW3",
+			"./src/IW4",
+			"./src/IW5",
+			"./dep/include",
+		}
+
+	project "CODO"
+		kind "StaticLib"
+		language "C++"
+		dependson "IW5"
+		dependson "IW4"
+		
+		pchheader "stdafx.hpp"
+		pchsource "src/CODO/stdafx.cpp"
+
+		files {
+			"./src/CODO/**.h",
+			"./src/CODO/**.hpp",
+			"./src/CODO/**.cpp",
+		}
+
+		syslibdirs {
+			"./build/bin",
+			"./dep/bin",
+		}
+
+		includedirs {
+			"./src",
+			"%{prj.location}/src",
+			"./src/ZoneTool",
+			"./src/ZoneUtils",
+			"./src/CODO",
 			"./src/IW3",
 			"./src/IW4",
 			"./src/IW5",
