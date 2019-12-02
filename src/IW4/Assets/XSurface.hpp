@@ -15,30 +15,27 @@ namespace ZoneTool
 		class IXSurface : public IAsset
 		{
 		private:
-			std::string m_name;
-			ModelSurface* m_asset;
+			std::string name_;
+			XModelSurfs* asset_;
 
-			void write_xsurfices(IZone* zone, std::shared_ptr<ZoneBuffer>& buf, XSurface* data, XSurface* dest,
+			void write_xsurfices(IZone* zone, ZoneBuffer* buf, XSurface* data, XSurface* dest,
 			                     std::uint16_t count);
 
 		public:
-			IXSurface();
-			~IXSurface();
+			XModelSurfs* parse(const std::string& name, ZoneMemory* mem);
 
-			ModelSurface* parse(const std::string& name, std::shared_ptr<ZoneMemory>& mem);
+			void init(const std::string& name, ZoneMemory* mem) override;
+			void init(void* asset, ZoneMemory* mem) override;
 
-			void init(const std::string& name, std::shared_ptr<ZoneMemory>& mem) override;
-			void init(void* asset, std::shared_ptr<ZoneMemory>& mem) override;
-
-			void prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem) override;
+			void prepare(ZoneBuffer* buf, ZoneMemory* mem) override;
 			void load_depending(IZone* zone) override;
 
-			void* pointer() override { return m_asset; }
+			void* pointer() override { return asset_; }
 			std::string name() override;
 			std::int32_t type() override;
-			void write(IZone* zone, std::shared_ptr<ZoneBuffer>& buffer) override;
+			void write(IZone* zone, ZoneBuffer* buffer) override;
 
-			static void dump(ModelSurface* asset);
+			static void dump(XModelSurfs* asset);
 		};
 	}
 }

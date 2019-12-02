@@ -12,98 +12,98 @@ namespace ZoneTool
 {
 	namespace IW4
 	{
-		ModelSurface* IXSurface::parse(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		XModelSurfs* IXSurface::parse(const std::string& name, ZoneMemory* mem)
 		{
 			AssetReader read(mem);
 
-			if (!read.Open("XSurface\\" + name + ".xse"))
+			if (!read.open("XSurface\\" + name + ".xse"))
 			{
 				return nullptr;
 			}
 
 			ZONETOOL_INFO("Parsing xmodel surface \"%s\"...", name.c_str());
 
-			auto asset = read.Array<ModelSurface>();
-			asset->name = read.String();
+			auto asset = read.read_array<XModelSurfs>();
+			asset->name = read.read_string();
 
-			asset->xSurficies = mem->Alloc<XSurface>(asset->xSurficiesCount);
+			asset->surfs = mem->Alloc<XSurface>(asset->numsurfs);
 
-			for (int i = 0; i < asset->xSurficiesCount; i++)
+			for (int i = 0; i < asset->numsurfs; i++)
 			{
-				asset->xSurficies[i].tileMode = read.Int();
-				asset->xSurficies[i].deformed = read.Int();
-				asset->xSurficies[i].baseTriIndex = read.Int();
-				asset->xSurficies[i].baseVertIndex = read.Int();
+				asset->surfs[i].tileMode = read.read_int();
+				asset->surfs[i].deformed = read.read_int();
+				asset->surfs[i].baseTriIndex = read.read_int();
+				asset->surfs[i].baseVertIndex = read.read_int();
 
 				for (int j = 0; j < 6; j++)
 				{
-					asset->xSurficies[i].partBits[j] = read.Int();
+					asset->surfs[i].partBits[j] = read.read_int();
 				}
 
 				// vertex
-				auto vertexInfo = read.Array<XSurfaceVertexInfo>();
-				memcpy(&asset->xSurficies[i].vertexInfo, vertexInfo, sizeof XSurfaceVertexInfo);
-				asset->xSurficies[i].vertexInfo.vertsBlend = read.Array<unsigned short>();
+				auto vertexInfo = read.read_array<XSurfaceVertexInfo>();
+				memcpy(&asset->surfs[i].vertexInfo, vertexInfo, sizeof XSurfaceVertexInfo);
+				asset->surfs[i].vertexInfo.vertsBlend = read.read_array<unsigned short>();
 
 				// verticies
-				asset->xSurficies[i].vertCount = read.Int();
-				asset->xSurficies[i].verticies = read.Array<GfxPackedVertex>();
+				asset->surfs[i].vertCount = read.read_int();
+				asset->surfs[i].verticies = read.read_array<GfxPackedVertex>();
 
 				// triangles
-				asset->xSurficies[i].triCount = read.Int();
-				asset->xSurficies[i].triIndices = read.Array<Face>();
+				asset->surfs[i].triCount = read.read_int();
+				asset->surfs[i].triIndices = read.read_array<Face>();
 
 				// rigidVertLists
-				asset->xSurficies[i].vertListCount = read.Int();
-				asset->xSurficies[i].rigidVertLists = read.Array<XRigidVertList>();
-				for (int vert = 0; vert < asset->xSurficies[i].vertListCount; vert++)
+				asset->surfs[i].vertListCount = read.read_int();
+				asset->surfs[i].rigidVertLists = read.read_array<XRigidVertList>();
+				for (int vert = 0; vert < asset->surfs[i].vertListCount; vert++)
 				{
-					if (asset->xSurficies[i].rigidVertLists[vert].collisionTree)
+					if (asset->surfs[i].rigidVertLists[vert].collisionTree)
 					{
-						asset->xSurficies[i].rigidVertLists[vert].collisionTree = read.Array<XSurfaceCollisionTree>();
+						asset->surfs[i].rigidVertLists[vert].collisionTree = read.read_array<XSurfaceCollisionTree>();
 
-						if (asset->xSurficies[i].rigidVertLists[vert].collisionTree->leafs)
+						if (asset->surfs[i].rigidVertLists[vert].collisionTree->leafs)
 						{
-							asset->xSurficies[i].rigidVertLists[vert].collisionTree->leafs = read.Array<
+							asset->surfs[i].rigidVertLists[vert].collisionTree->leafs = read.read_array<
 								XSurfaceCollisionLeaf>();
 						}
 
-						if (asset->xSurficies[i].rigidVertLists[vert].collisionTree->nodes)
+						if (asset->surfs[i].rigidVertLists[vert].collisionTree->nodes)
 						{
-							asset->xSurficies[i].rigidVertLists[vert].collisionTree->nodes = read.Array<
+							asset->surfs[i].rigidVertLists[vert].collisionTree->nodes = read.read_array<
 								XSurfaceCollisionNode>();
 						}
 					}
 					else
 					{
-						asset->xSurficies[i].rigidVertLists[vert].collisionTree = nullptr;
+						asset->surfs[i].rigidVertLists[vert].collisionTree = nullptr;
 					}
 				}
 			}
 
-			read.Close();
+			read.close();
 
 			return asset;
 		}
 
-		void IXSurface::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void IXSurface::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = this->parse(name, mem);
+			this->name_ = name;
+			this->asset_ = this->parse(name, mem);
 
-			if (!this->m_asset)
+			if (!this->asset_)
 			{
-				this->m_asset = DB_FindXAssetHeader(this->type(), this->m_name.data()).xsurface;
+				this->asset_ = DB_FindXAssetHeader(this->type(), this->name_.data()).xsurface;
 			}
 		}
 
-		void IXSurface::init(void* asset, std::shared_ptr<ZoneMemory>& mem)
+		void IXSurface::init(void* asset, ZoneMemory* mem)
 		{
-			this->m_asset = reinterpret_cast<ModelSurface*>(asset);
-			this->m_name = this->m_asset->name;
+			this->asset_ = reinterpret_cast<XModelSurfs*>(asset);
+			this->name_ = this->asset_->name;
 		}
 
-		void IXSurface::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IXSurface::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
@@ -113,7 +113,7 @@ namespace ZoneTool
 
 		std::string IXSurface::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IXSurface::type()
@@ -121,7 +121,7 @@ namespace ZoneTool
 			return xmodelsurfs;
 		}
 
-		void IXSurface::write_xsurfices(IZone* zone, std::shared_ptr<ZoneBuffer>& buf, XSurface* data, XSurface* dest,
+		void IXSurface::write_xsurfices(IZone* zone, ZoneBuffer* buf, XSurface* data, XSurface* dest,
 		                                std::uint16_t count)
 		{
 			assert(sizeof XSurface, 64);
@@ -194,102 +194,94 @@ namespace ZoneTool
 			}
 		}
 
-		void IXSurface::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void IXSurface::write(IZone* zone, ZoneBuffer* buf)
 		{
-			auto data = this->m_asset;
-			auto dest = buf->write<ModelSurface>(data);
+			auto data = this->asset_;
+			auto dest = buf->write<XModelSurfs>(data);
 
-			assert(sizeof ModelSurface, 36);
+			assert(sizeof XModelSurfs, 36);
 
 			buf->push_stream(3);
 			START_LOG_STREAM;
 
 			dest->name = buf->write_str(this->name());
 
-			if (data->xSurficies)
+			if (data->surfs)
 			{
 				buf->align(3);
-				auto destsurfaces = buf->write(data->xSurficies, data->xSurficiesCount);
-				this->write_xsurfices(zone, buf, data->xSurficies, destsurfaces, data->xSurficiesCount);
-				ZoneBuffer::ClearPointer(&dest->xSurficies);
+				auto destsurfaces = buf->write(data->surfs, data->numsurfs);
+				this->write_xsurfices(zone, buf, data->surfs, destsurfaces, data->numsurfs);
+				ZoneBuffer::ClearPointer(&dest->surfs);
 			}
 
 			END_LOG_STREAM;
 			buf->pop_stream();
 		}
 
-		void IXSurface::dump(ModelSurface* asset)
+		void IXSurface::dump(XModelSurfs* asset)
 		{
 			AssetDumper dump;
-			dump.Open("XSurface\\"s + asset->name + ".xse");
+			dump.open("XSurface\\"s + asset->name + ".xse");
 
 			if (asset->name == "tntbomb_mp_low10"s)
 			{
 				return;
 			}
 
-			dump.Array(asset, 1);
-			dump.String(asset->name);
+			dump.dump_array(asset, 1);
+			dump.dump_string(asset->name);
 
-			for (int i = 0; i < asset->xSurficiesCount; i++)
+			for (int i = 0; i < asset->numsurfs; i++)
 			{
-				dump.Int(asset->xSurficies[i].tileMode);
-				dump.Int(asset->xSurficies[i].deformed);
-				dump.Int(asset->xSurficies[i].baseTriIndex);
-				dump.Int(asset->xSurficies[i].baseVertIndex);
+				dump.dump_int(asset->surfs[i].tileMode);
+				dump.dump_int(asset->surfs[i].deformed);
+				dump.dump_int(asset->surfs[i].baseTriIndex);
+				dump.dump_int(asset->surfs[i].baseVertIndex);
 
 				for (int j = 0; j < 6; j++)
 				{
-					dump.Int(asset->xSurficies[i].partBits[j]);
+					dump.dump_int(asset->surfs[i].partBits[j]);
 				}
 
 				// vertex bs
-				dump.Array(&asset->xSurficies[i].vertexInfo, 1);
-				dump.Array(asset->xSurficies[i].vertexInfo.vertsBlend,
-				           asset->xSurficies[i].vertexInfo.vertCount[0] +
-				           (asset->xSurficies[i].vertexInfo.vertCount[1] * 3) +
-				           (asset->xSurficies[i].vertexInfo.vertCount[2] * 5) +
-				           (asset->xSurficies[i].vertexInfo.vertCount[3] * 7)
+				dump.dump_array(&asset->surfs[i].vertexInfo, 1);
+				dump.dump_array(asset->surfs[i].vertexInfo.vertsBlend,
+				           asset->surfs[i].vertexInfo.vertCount[0] +
+				           (asset->surfs[i].vertexInfo.vertCount[1] * 3) +
+				           (asset->surfs[i].vertexInfo.vertCount[2] * 5) +
+				           (asset->surfs[i].vertexInfo.vertCount[3] * 7)
 				);
 
-				dump.Int(asset->xSurficies[i].vertCount);
-				dump.Array(asset->xSurficies[i].verticies, asset->xSurficies[i].vertCount);
+				dump.dump_int(asset->surfs[i].vertCount);
+				dump.dump_array(asset->surfs[i].verticies, asset->surfs[i].vertCount);
 
-				dump.Int(asset->xSurficies[i].triCount);
-				dump.Array(asset->xSurficies[i].triIndices, asset->xSurficies[i].triCount);
+				dump.dump_int(asset->surfs[i].triCount);
+				dump.dump_array(asset->surfs[i].triIndices, asset->surfs[i].triCount);
 
-				dump.Int(asset->xSurficies[i].vertListCount);
-				dump.Array(asset->xSurficies[i].rigidVertLists, asset->xSurficies[i].vertListCount);
-				for (int vert = 0; vert < asset->xSurficies[i].vertListCount; vert++)
+				dump.dump_int(asset->surfs[i].vertListCount);
+				dump.dump_array(asset->surfs[i].rigidVertLists, asset->surfs[i].vertListCount);
+				for (int vert = 0; vert < asset->surfs[i].vertListCount; vert++)
 				{
-					if (asset->xSurficies[i].rigidVertLists[vert].collisionTree)
+					if (asset->surfs[i].rigidVertLists[vert].collisionTree)
 					{
-						dump.Array(asset->xSurficies[i].rigidVertLists[vert].collisionTree, 1);
+						dump.dump_array(asset->surfs[i].rigidVertLists[vert].collisionTree, 1);
 
-						if (asset->xSurficies[i].rigidVertLists[vert].collisionTree->leafs)
+						if (asset->surfs[i].rigidVertLists[vert].collisionTree->leafs)
 						{
-							dump.Array(asset->xSurficies[i].rigidVertLists[vert].collisionTree->leafs,
-							           asset->xSurficies[i].rigidVertLists[vert].collisionTree->leafCount);
+							dump.dump_array(asset->surfs[i].rigidVertLists[vert].collisionTree->leafs,
+							           asset->surfs[i].rigidVertLists[vert].collisionTree->leafCount);
 						}
 
-						if (asset->xSurficies[i].rigidVertLists[vert].collisionTree->nodes)
+						if (asset->surfs[i].rigidVertLists[vert].collisionTree->nodes)
 						{
-							dump.Array(asset->xSurficies[i].rigidVertLists[vert].collisionTree->nodes,
-							           asset->xSurficies[i].rigidVertLists[vert].collisionTree->nodeCount);
+							dump.dump_array(asset->surfs[i].rigidVertLists[vert].collisionTree->nodes,
+							           asset->surfs[i].rigidVertLists[vert].collisionTree->nodeCount);
 						}
 					}
 				}
 			}
 
-			dump.Close();
-		}
-
-		IXSurface::IXSurface()
-		{
-		}
-
-		IXSurface::~IXSurface()
-		{
+			dump.close();
 		}
 	}
 }

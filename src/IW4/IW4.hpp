@@ -8,7 +8,7 @@
 // ========================================================
 #pragma once
 
-#include <ZoneUtils/ZoneUtils.hpp>
+#include <ZoneUtils.hpp>
 #include "Functions.hpp"
 #include "Structs.hpp"
 #include "../IW5/Structs.hpp"
@@ -23,32 +23,36 @@ namespace ZoneTool
 		class Linker : public ILinker
 		{
 		public:
-			Linker();
-			~Linker();
-
-			const char* Version() override;
-			bool InUse() override;
-			void Startup() override;
-			std::shared_ptr<IZone> AllocZone(std::string& zone) override;
-			std::shared_ptr<ZoneBuffer> AllocBuffer() override;
-			void LoadZone(std::string& name) override;
-			void UnloadZones() override;
-			bool IsValidAssetType(std::string& type) override;
-			std::int32_t TypeToInt(std::string type) override;
-			std::string TypeToString(std::int32_t type) override;
-
-			void DumpZone(std::string& name) override;
-			void VerifyZone(std::string& name) override;
-
-			static void Run();
-			static void LoadDefaultZones();
-			static const char* Linker::GetAssetName(XAssetType type, XAssetHeader header);
+			const char* version() override;
+			bool is_used() override;
+			void startup() override;
+			std::shared_ptr<IZone> alloc_zone(const std::string& zone) override;
+			std::shared_ptr<ZoneBuffer> alloc_buffer() override;
+			void load_zone(const std::string& name) override;
+			void unload_zones() override;
+			bool is_valid_asset_type(std::string& type) override;
+			std::int32_t type_to_int(std::string type) override;
+			std::string type_to_string(std::int32_t type) override;
+            bool supports_building() override;
+			bool supports_version(const zone_target_version version) override;
+			
+			void dump_zone(const std::string& name) override;
+			void verify_zone(const std::string& name) override;
+			
+			static void run();
+			static void load_default_zones();
+			static const char* get_asset_name(XAssetType type, XAssetHeader header);
+			
 			static void DB_AddXAsset(XAssetType type, XAssetHeader header);
 			static void DB_AddXAssetStub();
 			static void IncreaseReadPointer();
 			static void IncreaseReadPointer2();
 			static void ReadHeader(void* ptr, int size);
 			static void Load_XSurfaceArray(int shouldLoad, int count);
+            static const char* GetZonePath(const char* zoneName);
+
+		private:
+			
 		};
 	}
 }

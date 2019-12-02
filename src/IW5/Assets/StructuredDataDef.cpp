@@ -201,9 +201,9 @@ namespace ZoneTool
 				addEntry((enumType_s)5, 4, "ret10");
 
 				// Gametypes
-				// addEntry((enumType_s)9, 1, "oneflag");
-				// addEntry((enumType_s)9, 2, "vip");
-				// addEntry((enumType_s)9, 3, "gtnw");
+				// addEntry((enum_type)9, 1, "oneflag");
+				// addEntry((enum_type)9, 2, "vip");
+				// addEntry((enum_type)9, 3, "gtnw");
 
 				ZONETOOL_INFO("Recipes patched.");
 			}
@@ -229,10 +229,10 @@ namespace ZoneTool
 		{
 		}
 
-		void IStructuredDataDef::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void IStructuredDataDef::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = DB_FindXAssetHeader(this->type(), this->name().data(), 1).structureddatadef;
+			this->name_ = name;
+			this->asset_ = DB_FindXAssetHeader(this->type(), this->name().data(), 1).structureddatadef;
 
 			memset(newIndices, 0, sizeof(StructuredDataEnumEntry*) * ENUM_COUNT);
 			memset(newIndexCount, 0, sizeof(int) * ENUM_COUNT);
@@ -243,10 +243,10 @@ namespace ZoneTool
 			}
 
 			// touch the asset
-			manipulate(this->m_asset);
+			manipulate(this->asset_);
 		}
 
-		void IStructuredDataDef::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IStructuredDataDef::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
@@ -256,7 +256,7 @@ namespace ZoneTool
 
 		std::string IStructuredDataDef::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IStructuredDataDef::type()
@@ -264,9 +264,9 @@ namespace ZoneTool
 			return structureddatadef;
 		}
 
-		void IStructuredDataDef::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void IStructuredDataDef::write(IZone* zone, ZoneBuffer* buf)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write(data);
 
 			buf->push_stream(3);

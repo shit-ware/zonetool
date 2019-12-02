@@ -74,32 +74,28 @@ namespace ZoneTool
 {
 	namespace IW3
 	{
-		void IMaterial::dumpStateBits(Material* mat)
+		void IMaterial::dump_statebits(Material* mat)
 		{
 			if (mat && mat->techniqueSet)
 			{
-				auto path = "techsets\\"s + mat->techniqueSet->name + ".statebits";
-				auto file = FileSystem::FileOpen(path, "wb");
-				fwrite(mat->stateBitsEntry, 34, 1, file);
-				FileSystem::FileClose(file);
+				ITechset::dump_statebits(mat->techniqueSet->name, mat->stateBitsEntry);
 			}
 		}
 
-		void IMaterial::dump(Material* mat)
+		void IMaterial::dump(Material* mat, ZoneMemory* mem)
 		{
 			if (mat)
 			{
-				dumpStateBits(mat);
+				dump_statebits(mat);
 
 				auto path = "materials\\"s + mat->name;
 
-				if (FileSystem::FileExists(path))
+				auto file = FileSystem::FileOpen(path, "wb");
+				if (!file)
 				{
 					return;
 				}
-
-				auto file = FileSystem::FileOpen(path, "wb");
-
+				
 				nlohmann::json matdata;
 
 				MATERIAL_DUMP_STRING(name);
@@ -120,7 +116,6 @@ namespace ZoneTool
 				MATERIAL_DUMP_INT(stateFlags);
 				MATERIAL_DUMP_INT(cameraRegion);
 
-				MATERIAL_DUMP_BITS_ENTRY(stateBitsEntry, 34);
 				MATERIAL_DUMP_CONST_ARRAY(constantTable, mat->constantCount);
 				MATERIAL_DUMP_STATE_MAP(stateMap, mat->stateBitsCount);
 

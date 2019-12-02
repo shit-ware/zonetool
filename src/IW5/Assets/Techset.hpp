@@ -15,29 +15,28 @@ namespace ZoneTool
 		class ITechset : public IAsset
 		{
 		private:
-			std::string m_name;
-			MaterialTechniqueSet* m_asset;
+			std::string name_;
+			MaterialTechniqueSet* asset_;
 			bool m_parsed;
-
-			MaterialTechnique* parseTechniquePass(const std::string& name, std::shared_ptr<ZoneMemory>& mem,
-			                                      std::uint32_t index);
-			MaterialTechniqueSet* parse(const std::string& name, std::shared_ptr<ZoneMemory>& mem);
-
+			
 		public:
-			ITechset();
-			~ITechset();
-
-			void init(const std::string& name, std::shared_ptr<ZoneMemory>& mem) override;
-			void prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem) override;
+			static MaterialTechnique* parse_technique(const std::string& name, ZoneMemory* mem,
+				std::uint32_t index);
+			static MaterialTechniqueSet* parse(const std::string& name, ZoneMemory* mem);
+			static char* parse_statebits(const std::string& techset, ZoneMemory* mem);
+			
+			void init(const std::string& name, ZoneMemory* mem) override;
+			void prepare(ZoneBuffer* buf, ZoneMemory* mem) override;
 			void load_depending(IZone* zone) override;
 
 			std::string name() override;
 			std::int32_t type() override;
-			void write(IZone* zone, std::shared_ptr<ZoneBuffer>& buffer) override;
+			void write(IZone* zone, ZoneBuffer* buffer) override;
 
+			static void dump_technique_data(MaterialTechniqueSet* asset, bool is_iw5 = true);
+			static void dump_statebits(const std::string& techset, char* statebits);
 			static void dump(MaterialTechniqueSet* asset);
-			static void dumpTechniquePass(MaterialTechnique* asset);
-			static void dumpToJson(MaterialTechniqueSet* asset);
+			static void dump_technique(MaterialTechnique* asset);
 		};
 	}
 }

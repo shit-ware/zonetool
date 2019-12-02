@@ -7,13 +7,13 @@
 // License: GNU GPL v3.0
 // ========================================================
 #include "stdafx.hpp"
-#include <zlib/zlib.h>
+#include <zlib.h>
 
 namespace ZoneTool
 {
 	namespace IW5
 	{
-		ScriptFile* IScriptFile::parse(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		ScriptFile* IScriptFile::parse(const std::string& name, ZoneMemory* mem)
 		{
 			if (FileSystem::FileExists(name + ".cgsc") && FileSystem::FileExists(name + ".cgsc.stack"))
 			{
@@ -67,18 +67,18 @@ namespace ZoneTool
 			return nullptr;
 		}
 
-		void IScriptFile::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void IScriptFile::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = this->parse(name, mem);
+			this->name_ = name;
+			this->asset_ = this->parse(name, mem);
 
-			if (!this->m_asset)
+			if (!this->asset_)
 			{
-				this->m_asset = DB_FindXAssetHeader(this->type(), this->m_name.data(), 1).scriptfile;
+				this->asset_ = DB_FindXAssetHeader(this->type(), this->name_.data(), 1).scriptfile;
 			}
 		}
 
-		void IScriptFile::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IScriptFile::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
@@ -88,7 +88,7 @@ namespace ZoneTool
 
 		std::string IScriptFile::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IScriptFile::type()
@@ -96,9 +96,9 @@ namespace ZoneTool
 			return scriptfile;
 		}
 
-		void IScriptFile::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void IScriptFile::write(IZone* zone, ZoneBuffer* buf)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write<ScriptFile>(data);
 
 			buf->push_stream(3);
@@ -132,9 +132,9 @@ namespace ZoneTool
 
 		void IScriptFile::dump(ScriptFile* asset)
 		{
-			/*auto fp = FileSystem::FileOpen(asset->name, "wb");
+			/*auto fp_ = FileSystem::FileOpen(asset->name, "wb");
 
-			if (fp)
+			if (fp_)
 			{
 				if (asset->compressedLen)
 				{
@@ -143,11 +143,11 @@ namespace ZoneTool
 
 					auto status = uncompress(uncompressed.data(), (uLongf*)&asset->len, (Bytef*)asset->buffer, asset->compressedLen);
 
-					fwrite(uncompressed.data(), uncompressed.size(), 1, fp);
+					fwrite(uncompressed.data(), uncompressed.size(), 1, fp_);
 				}
 			}
 
-			FileSystem::FileClose(fp);*/
+			FileSystem::FileClose(fp_);*/
 		}
 
 		IScriptFile::IScriptFile()

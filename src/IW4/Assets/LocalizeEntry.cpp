@@ -20,13 +20,19 @@ namespace ZoneTool
 		{
 		}
 
-		void ILocalizeEntry::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void ILocalizeEntry::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = DB_FindXAssetHeader(this->type(), this->name().data()).localize;
+			this->name_ = name;
+			this->asset_ = DB_FindXAssetHeader(this->type(), this->name().data()).localize;
 		}
 
-		void ILocalizeEntry::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void ILocalizeEntry::init(void* asset, ZoneMemory* mem)
+		{
+			this->asset_ = reinterpret_cast<LocalizeEntry*>(asset);
+			this->name_ = this->asset_->name;
+		}
+
+		void ILocalizeEntry::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
@@ -36,7 +42,7 @@ namespace ZoneTool
 
 		std::string ILocalizeEntry::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t ILocalizeEntry::type()
@@ -44,9 +50,9 @@ namespace ZoneTool
 			return localize;
 		}
 
-		void ILocalizeEntry::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void ILocalizeEntry::write(IZone* zone, ZoneBuffer* buf)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write(data);
 
 			buf->push_stream(3);

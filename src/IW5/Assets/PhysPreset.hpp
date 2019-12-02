@@ -15,20 +15,20 @@ namespace ZoneTool
 		class IPhysPreset : public IAsset
 		{
 		private:
-			std::string m_name;
-			PhysPreset* m_asset;
+			std::string name_;
+			PhysPreset* asset_;
 
 		public:
 			IPhysPreset();
 			~IPhysPreset();
 
-			void init(const std::string& name, std::shared_ptr<ZoneMemory>& mem) override;
-			void prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem) override;
+			void init(const std::string& name, ZoneMemory* mem) override;
+			void prepare(ZoneBuffer* buf, ZoneMemory* mem) override;
 			void load_depending(IZone* zone) override;
 
 			std::string name() override;
 			std::int32_t type() override;
-			void write(IZone* zone, std::shared_ptr<ZoneBuffer>& buffer) override;
+			void write(IZone* zone, ZoneBuffer* buffer) override;
 
 			static void dump(PhysPreset* asset);
 		};

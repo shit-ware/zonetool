@@ -15,23 +15,23 @@ namespace ZoneTool
 		class IMaterial : public IAsset
 		{
 		private:
-			std::string m_name;
-			Material* m_asset;
+			std::string name_;
+			Material* asset_;
 
-			Material* parse(std::string name, std::shared_ptr<ZoneMemory>& mem);
+			Material* parse(std::string name, ZoneMemory* mem);
 
 		public:
 			IMaterial();
 			~IMaterial();
 
 			void FixStatebits(IZone* zone);
-			void init(const std::string& name, std::shared_ptr<ZoneMemory>& mem) override;
-			void prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem) override;
+			void init(const std::string& name, ZoneMemory* mem) override;
+			void prepare(ZoneBuffer* buf, ZoneMemory* mem) override;
 			void load_depending(IZone* zone) override;
 
 			std::string name() override;
 			std::int32_t type() override;
-			void write(IZone* zone, std::shared_ptr<ZoneBuffer>& buffer) override;
+			void write(IZone* zone, ZoneBuffer* buffer) override;
 
 			static void dump(Material* asset);
 		};

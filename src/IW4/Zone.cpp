@@ -12,7 +12,7 @@ namespace ZoneTool
 {
 	namespace IW4
 	{
-		IAsset* Zone::FindAsset(std::int32_t type, std::string name)
+		IAsset* Zone::find_asset(std::int32_t type, const std::string& name)
 		{
 			for (auto idx = 0u; idx < m_assets.size(); idx++)
 			{
@@ -25,7 +25,7 @@ namespace ZoneTool
 			return nullptr;
 		}
 
-		void* Zone::GetAssetPointer(std::int32_t type, std::string name)
+		void* Zone::get_asset_pointer(std::int32_t type, const std::string& name)
 		{
 			for (auto idx = 0u; idx < m_assets.size(); idx++)
 			{
@@ -33,7 +33,6 @@ namespace ZoneTool
 				{
 					auto ptr = reinterpret_cast<void*>((3 << 28) | ((this->m_assetbase + (8 * idx) + 4) & 0x0FFFFFFF) +
 						1);
-					// ZONETOOL_INFO("Asset pointer is %u", ptr);
 					return ptr;
 				}
 			}
@@ -41,7 +40,7 @@ namespace ZoneTool
 			return nullptr;
 		}
 
-		void Zone::AddAssetOfTypePtr(std::int32_t type, void* pointer)
+		void Zone::add_asset_of_type_by_pointer(std::int32_t type, void* pointer)
 		{
 #ifdef USE_VMPROTECT
 			VMProtectBeginUltra("IW4::Zone::AddAssetOfTypePtr");
@@ -60,7 +59,7 @@ namespace ZoneTool
 			if (type == __type__) \
 			{ \
 				auto asset = std::make_shared < __interface__ >(); \
-				asset->init(pointer, this->m_zonemem); \
+				asset->init(pointer, this->m_zonemem.get()); \
 				asset->load_depending(this); \
 				m_assets.push_back(asset); \
 			}
@@ -68,23 +67,21 @@ namespace ZoneTool
 			// declare asset interfaces
 			DECLARE_ASSET(xmodelsurfs, IXSurface);
 			DECLARE_ASSET(image, IGfxImage);
-			DECLARE_ASSET(pixelshader, IPixelShader);
-			DECLARE_ASSET(vertexshader, IVertexShader);
-			DECLARE_ASSET(vertexdecl, IVertexDecl);
+			DECLARE_ASSET(localize, ILocalizeEntry);
 
 #ifdef USE_VMPROTECT
 			VMProtectEnd();
 #endif
 		}
 
-		void Zone::AddAssetOfType(std::int32_t type, const std::string& name)
+		void Zone::add_asset_of_type(std::int32_t type, const std::string& name)
 		{
 #ifdef USE_VMPROTECT
 			VMProtectBeginUltra("IW4::Zone::AddAssetOfType");
 #endif
 
 			// don't add asset if it already exists
-			if (GetAssetPointer(type, name))
+			if (get_asset_pointer(type, name))
 			{
 				return;
 			}
@@ -93,7 +90,7 @@ namespace ZoneTool
 			if (type == __type__) \
 			{ \
 				auto asset = std::make_shared < __interface__ >(); \
-				asset->init(name, this->m_zonemem); \
+				asset->init(name, this->m_zonemem.get()); \
 				asset->load_depending(this); \
 				m_assets.push_back(asset); \
 			}
@@ -127,65 +124,70 @@ namespace ZoneTool
 			DECLARE_ASSET(col_map_mp, IClipMap);
 			DECLARE_ASSET(fx, IFxEffectDef);
 			DECLARE_ASSET(lightdef, ILightDef);
-
-			//DECLARE_ASSET(weapon, IWeaponDef); //still a work in progress, the CPP file isnt complete
-			//DECLARE_ASSET(structureddatadef, IStructuredDataDef);
+			DECLARE_ASSET(structureddatadef, IStructuredDataDef);
+			DECLARE_ASSET(addon_map_ents, IAddonMapEnts);
 
 #ifdef USE_VMPROTECT
 			VMProtectEnd();
 #endif
 		}
 
-		void Zone::AddAssetOfType(const std::string& type, const std::string& name)
+		void Zone::add_asset_of_type(const std::string& type, const std::string& name)
 		{
-			std::int32_t itype = m_linker->TypeToInt(type);
-			this->AddAssetOfType(itype, name);
+			std::int32_t itype = m_linker->type_to_int(type);
+			this->add_asset_of_type(itype, name);
 		}
 
-		std::int32_t Zone::GetTypeByName(const std::string& type)
+		std::int32_t Zone::get_type_by_name(const std::string& type)
 		{
-			return m_linker->TypeToInt(type);
+			return m_linker->type_to_int(type);
 		}
 
-		void Zone::Build(std::shared_ptr<ZoneBuffer>& buf)
+		void Zone::build(ZoneBuffer* buf)
 		{
-			auto startTime = GetTickCount64();
+			const auto start_time = GetTickCount64();
 
 			// make a folder in main, for the map images
-			std::filesystem::create_directories("main\\" + this->m_name + "\\images");
+			std::filesystem::create_directories("main\\" + this->name_ + "\\images");
 
-			ZONETOOL_INFO("Compiling fastfile \"%s\"...", this->m_name.data());
+			ZONETOOL_INFO("Compiling fastfile \"%s\"...", this->name_.data());
 
 			constexpr std::size_t num_streams = 8;
-			XZoneMemory<num_streams> mem;
+			XZoneMemory<num_streams> mem = {};
 
-			std::size_t headersize = sizeof XZoneMemory<num_streams>;
-			memset(&mem, 0, headersize);
+			const auto header_size = sizeof XZoneMemory<num_streams>;
+			memset(&mem, 0, header_size);
 
 			auto zone = buf->at<XZoneMemory<num_streams>>();
 
 			// write zone header
-			buf->write(&mem);
-
+			auto mem_ptr = buf->write(&mem);
+			
 			std::uintptr_t pad = 0xFFFFFFFF;
 			std::uintptr_t zero = 0;
 
 			// write asset types to header
 			for (auto i = 0u; i < m_assets.size(); i++)
 			{
-				m_assets[i]->prepare(buf, this->m_zonemem);
+				m_assets[i]->prepare(buf, this->m_zonemem.get());
 			}
 
 			// write scriptstring count
-			std::uint32_t stringcount = buf->scriptstring_count();
-			buf->write<std::uint32_t>(&stringcount);
+			auto stringcount = buf->scriptstring_count();
+			const auto stringcount_ptr = buf->write<std::uint32_t>(&stringcount);
 			buf->write<std::uintptr_t>(stringcount > 0 ? (&pad) : (&zero));
 
 			// write asset count
-			std::uint32_t asset_count = m_assets.size();
-			buf->write<std::uint32_t>(&asset_count);
+			auto asset_count = m_assets.size();
+			const auto asset_count_ptr = buf->write<std::uint32_t>(&asset_count);
 			buf->write<std::uintptr_t>(asset_count > 0 ? (&pad) : (&zero));
 
+			if (target_ != zone_target::pc)
+			{
+				endian_convert(asset_count_ptr);
+				endian_convert(stringcount_ptr);
+			}
+			
 			// push stream
 			buf->push_stream(3);
 			START_LOG_STREAM;
@@ -214,15 +216,28 @@ namespace ZoneTool
 
 			// set asset ptr base
 			this->m_assetbase = buf->stream_offset(3);
-			// ZONETOOL_INFO("m_assetbase: %u", this->m_assetbase);
 
 			// write asset types to header
 			for (auto i = 0u; i < asset_count; i++)
 			{
 				// write asset data to zone
 				auto type = m_assets[i]->type();
-				buf->write(&type);
+				const auto type_ptr = buf->write(&type);
 				buf->write(&pad);
+
+				if (target_ != zone_target::pc)
+				{
+					if (*type_ptr >= 7 && target_ == zone_target::xbox360)
+					{
+						*type_ptr -= 2;
+					}
+					else if (*type_ptr >= 8 && target_ == zone_target::ps3)
+					{
+						*type_ptr -= 1;
+					}
+					
+					endian_convert(type_ptr);
+				}
 			}
 
 			// write assets
@@ -234,7 +249,7 @@ namespace ZoneTool
 
 				// write asset
 				asset->write(this, buf);
-
+				
 				// pop stream
 				buf->pop_stream();
 			}
@@ -244,7 +259,7 @@ namespace ZoneTool
 			buf->pop_stream();
 
 			// update zone header
-			zone->size = buf->size() - headersize;
+			zone->size = buf->size() - header_size;
 			zone->externalsize = 0;
 
 			// Update stream data
@@ -253,8 +268,18 @@ namespace ZoneTool
 				zone->streams[i] = buf->stream_offset(i);
 			}
 
+			if (target_ != zone_target::pc)
+			{
+				endian_convert(&mem_ptr->size);
+				endian_convert(&mem_ptr->externalsize);
+				for (auto& stream : mem_ptr->streams)
+				{
+					endian_convert(&stream);
+				}
+			}
+
 			// Dump zone to disk (DEBUGGING PURPOSES)
-			buf->save("debug\\" + this->m_name + ".zone");
+			buf->save("debug\\" + this->name_ + ".zone");
 
 			// Compress buffer
 			auto buf_compressed = buf->compress_zlib();
@@ -265,23 +290,39 @@ namespace ZoneTool
 			header->version = 276;
 			header->allowOnlineUpdate = 0;
 
-			// Encrypt fastfile
-			// ZoneBuffer encrypted(buf_compressed);
-			// encrypted.encrypt();
+			if (target_ == zone_target::xbox360 || target_ == zone_target::ps3)
+			{
+				header->version = 269;
+				endian_convert(&header->version);
+			}
 
 			// Save fastfile
-			ZoneBuffer fastfile(buf_compressed.size() + 21);
+			ZoneBuffer fastfile(buf_compressed.size() + ((target_ == zone_target::xbox360 || target_ == zone_target::ps3) ? 37 : 21));
 			fastfile.init_streams(1);
 			fastfile.write_stream(header, 21);
+
+			if (target_ == zone_target::xbox360 || target_ == zone_target::ps3)
+			{
+				auto language = 1;
+				auto entry_count = 0;
+
+				endian_convert(&language);
+				endian_convert(&entry_count);
+				
+				fastfile.write_stream(&language, 4);
+				fastfile.write_stream(&entry_count, 4);
+				fastfile.write_stream(&mem_ptr->size, 4);
+				fastfile.write_stream(&mem_ptr->size, 4);
+			}
 
 			fastfile.write(buf_compressed.data(), buf_compressed.size());
 
 			// rekto
-			// fastfile.save("zone\\pluto\\common\\" + this->m_name + ".ff");
-			fastfile.save("zone\\english\\" + this->m_name + ".ff");
+			// fastfile.save("zone\\pluto\\common\\" + this->name_ + ".ff");
+			fastfile.save("zone\\english\\" + this->name_ + ".ff");
 
-			ZONETOOL_INFO("Successfully compiled fastfile \"%s\"!", this->m_name.data());
-			ZONETOOL_INFO("Compiling took %u msec.", GetTickCount64() - startTime);
+			ZONETOOL_INFO("Successfully compiled fastfile \"%s\"!", this->name_.data());
+			ZONETOOL_INFO("Compiling took %u msec.", GetTickCount64() - start_time);
 
 			// this->m_linker->UnloadZones();
 		}
@@ -291,7 +332,7 @@ namespace ZoneTool
 			currentzone = name;
 
 			this->m_linker = linker;
-			this->m_name = name;
+			this->name_ = name;
 
 			this->m_zonemem = std::make_shared<ZoneMemory>(MAX_ZONE_SIZE);
 		}

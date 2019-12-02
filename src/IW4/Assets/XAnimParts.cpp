@@ -11,51 +11,51 @@
 
 namespace ZoneTool::IW4
 {
-	void IXAnimParts::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+	void IXAnimParts::init(const std::string& name, ZoneMemory* mem)
 	{
-		this->m_name = name;
-		this->m_asset = reinterpret_cast<IW4::XAnimParts*>(IW5::IXAnimParts::parse(name, mem, SL_AllocString)); // 
+		this->name_ = name;
+		this->asset_ = reinterpret_cast<IW4::XAnimParts*>(IW5::IXAnimParts::parse(name, mem, SL_AllocString)); // 
 
-		if (!this->m_asset)
+		if (!this->asset_)
 		{
-			this->m_asset = DB_FindXAssetHeader(this->type(), this->name().data()).xanimparts;
+			this->asset_ = DB_FindXAssetHeader(this->type(), this->name().data()).xanimparts;
 		}
 	}
 
-	void IXAnimParts::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+	void IXAnimParts::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 	{
 		// fixup scriptstrings
 		auto xanim = mem->Alloc<XAnimParts>();
-		memcpy(xanim, this->m_asset, sizeof XAnimParts);
+		memcpy(xanim, this->asset_, sizeof XAnimParts);
 
 		// allocate tagnames
-		if (this->m_asset->tagnames)
+		if (this->asset_->tagnames)
 		{
 			xanim->tagnames = mem->Alloc<unsigned short>(xanim->boneCount[9]);
-			memcpy(xanim->tagnames, this->m_asset->tagnames, sizeof(unsigned short) * xanim->boneCount[9]);
+			memcpy(xanim->tagnames, this->asset_->tagnames, sizeof(unsigned short) * xanim->boneCount[9]);
 
 			for (auto i = 0; i < xanim->boneCount[9]; i++)
 			{
 				if (xanim->tagnames[i])
 				{
-					const std::string bone = SL_ConvertToString(this->m_asset->tagnames[i]);
+					const std::string bone = SL_ConvertToString(this->asset_->tagnames[i]);
 					xanim->tagnames[i] = buf->write_scriptstring(bone);
 				}
 			}
 		}
 
 		// allocate notetracks
-		xanim->notetracks = mem->Alloc<XAnimNotifyInfo>(xanim->notetrackCount);
-		memcpy(xanim->notetracks, this->m_asset->notetracks, sizeof XAnimNotifyInfo * xanim->notetrackCount);
+		xanim->notify = mem->Alloc<XAnimNotifyInfo>(xanim->notifyCount);
+		memcpy(xanim->notify, this->asset_->notify, sizeof XAnimNotifyInfo * xanim->notifyCount);
 
 		// touch XAnimNotifyInfo, realloc tagnames
-		for (auto i = 0; i < xanim->notetrackCount; i++)
+		for (auto i = 0; i < xanim->notifyCount; i++)
 		{
-			const std::string bone = SL_ConvertToString(this->m_asset->notetracks[i].name);
-			xanim->notetracks[i].name = buf->write_scriptstring(bone);
+			const std::string bone = SL_ConvertToString(this->asset_->notify[i].name);
+			xanim->notify[i].name = buf->write_scriptstring(bone);
 		}
 
-		this->m_asset = xanim;
+		this->asset_ = xanim;
 	}
 
 	void IXAnimParts::load_depending(IZone* zone)
@@ -64,7 +64,7 @@ namespace ZoneTool::IW4
 
 	std::string IXAnimParts::name()
 	{
-		return this->m_name;
+		return this->name_;
 	}
 
 	std::int32_t IXAnimParts::type()
@@ -72,9 +72,9 @@ namespace ZoneTool::IW4
 		return xanim;
 	}
 
-	void IXAnimParts::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+	void IXAnimParts::write(IZone* zone, ZoneBuffer* buf)
 	{
-		auto data = this->m_asset;
+		auto data = this->asset_;
 		auto dest = buf->write(data);
 		
 		buf->push_stream(3);
@@ -88,10 +88,10 @@ namespace ZoneTool::IW4
 			buf->write_stream(data->tagnames, sizeof(short), data->boneCount[9]);
 			dest->tagnames = reinterpret_cast<unsigned short*>(-1);
 		}
-		if (data->notetracks) // notetracks
+		if (data->notify) // notify
 		{
 			buf->align(3);
-			buf->write_stream(data->notetracks, sizeof(XAnimNotifyInfo), data->notetrackCount);
+			buf->write_stream(data->notify, sizeof(XAnimNotifyInfo), data->notifyCount);
 			dest->tagnames = reinterpret_cast<unsigned short*>(-1);
 		}
 

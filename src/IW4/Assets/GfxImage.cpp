@@ -7,6 +7,7 @@
 // License: GNU GPL v3.0
 // ========================================================
 #include "stdafx.hpp"
+#include "IW5/Assets/GfxImage.hpp"
 
 namespace ZoneTool
 {
@@ -37,7 +38,7 @@ namespace ZoneTool
 			return newName;
 		}
 
-		GfxImage* IGfxImage::parse(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		GfxImage* IGfxImage::parse(const std::string& name, ZoneMemory* mem)
 		{
 			auto path = "images\\" + this->clean_name(name) + ".ffimg";
 
@@ -102,42 +103,42 @@ namespace ZoneTool
 			return img;
 		}
 
-		void IGfxImage::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void IGfxImage::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = this->parse(name, mem);
-			this->isMapImage = (this->m_name.size() >= 6)
-				                   ? ((this->m_name.substr(0, 6) == "*light" || this->m_name.substr(0, 6) == "*refle" ||
-					                      this->m_name == "$outdoor")
+			this->name_ = name;
+			this->asset_ = this->parse(name, mem);
+			this->isMapImage = (this->name_.size() >= 6)
+				                   ? ((this->name_.substr(0, 6) == "*light" || this->name_.substr(0, 6) == "*refle" ||
+					                      this->name_ == "$outdoor")
 					                      ? true
 					                      : false)
 				                   : false;
 
-			if (!this->m_asset)
+			if (!this->asset_)
 			{
-				this->m_asset = DB_FindXAssetHeader(this->type(), this->m_name.data()).gfximage;
+				this->asset_ = DB_FindXAssetHeader(this->type(), this->name_.data()).gfximage;
 			}
 		}
 
-		void IGfxImage::init(void* asset, std::shared_ptr<ZoneMemory>& mem)
+		void IGfxImage::init(void* asset, ZoneMemory* mem)
 		{
-			this->m_asset = reinterpret_cast<GfxImage*>(asset);
-			this->m_name = this->m_asset->name;
-			this->isMapImage = (this->m_name.size() >= 6)
-				                   ? ((this->m_name.substr(0, 6) == "*light" || this->m_name.substr(0, 6) == "*refle" ||
-					                      this->m_name == "$outdoor")
+			this->asset_ = reinterpret_cast<GfxImage*>(asset);
+			this->name_ = this->asset_->name;
+			this->isMapImage = (this->name_.size() >= 6)
+				                   ? ((this->name_.substr(0, 6) == "*light" || this->name_.substr(0, 6) == "*refle" ||
+					                      this->name_ == "$outdoor")
 					                      ? true
 					                      : false)
 				                   : false;
 
-			auto parsed = this->parse(this->m_name, mem);
+			auto parsed = this->parse(this->name_, mem);
 			if (parsed)
 			{
-				this->m_asset = parsed;
+				this->asset_ = parsed;
 			}
 		}
 
-		void IGfxImage::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IGfxImage::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
@@ -147,38 +148,19 @@ namespace ZoneTool
 
 		std::string IGfxImage::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IGfxImage::type()
 		{
 			return image;
 		}
-
-		void IGfxImage::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		
+		void IGfxImage::write(IZone* zone, ZoneBuffer* buf)
 		{
-			if (FileSystem::FileExists(this->name() + ".iwi") && !std::filesystem::exists(
-				"main\\iw4_images\\" + this->name() + ".iwi"))
-			{
-				auto fp = fopen(
-					va("main\\%s\\images\\%s.iwi", FileSystem::GetFastFile().data(), this->name().data()).data(), "wb");
-				if (fp)
-				{
-					auto origfp = FileSystem::FileOpen(this->name() + ".iwi", "rb");
-
-					if (origfp)
-					{
-						auto origsize = FileSystem::FileSize(origfp);
-						auto bytes = FileSystem::ReadBytes(origfp, origsize);
-						fwrite(&bytes[0], bytes.size(), 1, fp);
-						fclose(origfp);
-					}
-
-					fclose(fp);
-				}
-			}
-
-			auto data = this->m_asset;
+			IW5::IGfxImage::dump_iwi(this->name());
+			
+			auto data = this->asset_;
 			auto dest = buf->write(data);
 
 			buf->push_stream(3);

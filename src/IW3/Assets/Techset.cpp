@@ -11,6 +11,7 @@
 #include "../IW4/Assets/VertexDecl.hpp"
 #include "../IW4/Assets/VertexShader.hpp"
 #include "../IW4/Assets/PixelShader.hpp"
+#include "IW4/Assets/Techset.hpp"
 
 static const unsigned int crcTable[] =
 {
@@ -76,12 +77,12 @@ std::uint32_t Crc32(void* buffer, const std::size_t size, const std::uint32_t in
 namespace ZoneTool
 {
 	namespace IW3
-	{
+	{		
 		std::string GenerateNameForVertexDecl(MaterialVertexDeclaration* vertexDecl)
 		{
 			// base name + crc32
 			auto name = "iw3_vertexdecl_"s;
-			auto crc32 = Crc32(vertexDecl->routing.data, sizeof(MaterialStreamRouting) * vertexDecl->streamCount, 0);
+			auto crc32 = Crc32(vertexDecl->routing.data, sizeof MaterialVertexDeclaration, 0);
 
 			// append crc32 to vertexdecl name
 			name += std::to_string(crc32);
@@ -90,13 +91,12 @@ namespace ZoneTool
 			return name;
 		}
 
-		void ITechset::dumpVertexDecl(const char* name, MaterialVertexDeclaration* vertex)
+		IW4::VertexDecl* ITechset::dump_vertex_decl(const std::string& name, MaterialVertexDeclaration* vertex, ZoneMemory* mem)
 		{
 			// convert to IW4
-			auto asset = new IW4::VertexDecl;
-			memset(asset, 0, sizeof IW4::VertexDecl);
-
-			asset->name = name;
+			const auto asset = mem->Alloc<IW4::VertexDecl>();
+			
+			asset->name = mem->StrDup(name);
 
 			asset->hasOptionalSource = vertex->hasOptionalSource;
 			asset->streamCount = vertex->streamCount;
@@ -115,20 +115,19 @@ namespace ZoneTool
 			// shit out a warning
 			if (asset->streamCount > 13)
 			{
-				ZONETOOL_ERROR("Vertexdecl %s has more than 13 streams.", name);
+				ZONETOOL_ERROR("Vertexdecl %s has more than 13 streams.", name.data());
 			}
 
 			// lets pray it works
 			IW4::IVertexDecl::dump(asset);
 
-			delete[] asset;
+			return asset;
 		}
 
-		void ITechset::dumpVertexShader(MaterialVertexShader* shader)
+		IW4::VertexShader* ITechset::dump_vertex_shader(MaterialVertexShader* shader, ZoneMemory* mem)
 		{
 			// convert to IW4
-			auto asset = new IW4::VertexShader;
-			memset(asset, 0, sizeof IW4::VertexShader);
+			const auto asset = mem->Alloc<IW4::VertexShader>();
 
 			asset->name = shader->name;
 			asset->shader = shader->prog.vs;
@@ -138,14 +137,13 @@ namespace ZoneTool
 			// dump shader
 			IW4::IVertexShader::dump(asset);
 
-			delete[] asset;
+			return asset;
 		}
 
-		void ITechset::dumpPixelShader(MaterialPixelShader* shader)
+		IW4::PixelShader* ITechset::dump_pixel_shader(MaterialPixelShader* shader, ZoneMemory* mem)
 		{
 			// convert to IW4
-			auto asset = new IW4::PixelShader;
-			memset(asset, 0, sizeof IW4::PixelShader);
+			const auto asset = mem->Alloc<IW4::PixelShader>();
 
 			asset->name = shader->name;
 			asset->shader = shader->prog.ps;
@@ -155,142 +153,284 @@ namespace ZoneTool
 			// dump shader
 			IW4::IPixelShader::dump(asset);
 
-			delete[] asset;
+			return asset;
 		}
 
-		void ITechset::dumpTechniquePass(MaterialTechnique* asset)
+		std::unordered_map<std::int32_t, std::int32_t> iw3_technique_map =
 		{
-			auto fp = FileSystem::FileOpen("techsets\\"s + asset->hdr.name + ".technique"s, "wb");
-			if (!fp)
+			{IW3::TECHNIQUE_DEPTH_PREPASS, IW4::TECHNIQUE_DEPTH_PREPASS},
+			{IW3::TECHNIQUE_BUILD_FLOAT_Z, IW4::TECHNIQUE_BUILD_FLOAT_Z},
+			{IW3::TECHNIQUE_BUILD_SHADOWMAP_DEPTH, IW4::TECHNIQUE_BUILD_SHADOWMAP_DEPTH},
+			{IW3::TECHNIQUE_BUILD_SHADOWMAP_COLOR, IW4::TECHNIQUE_BUILD_SHADOWMAP_COLOR},
+			{IW3::TECHNIQUE_UNLIT, IW4::TECHNIQUE_UNLIT},
+			{IW3::TECHNIQUE_EMISSIVE, IW4::TECHNIQUE_EMISSIVE},
+			{IW3::TECHNIQUE_EMISSIVE_SHADOW, IW4::TECHNIQUE_EMISSIVE_SHADOW},
+			{IW3::TECHNIQUE_LIT_BEGIN, IW4::TECHNIQUE_LIT_BEGIN},
+			{IW3::TECHNIQUE_LIT, IW4::TECHNIQUE_LIT},
+			{IW3::TECHNIQUE_LIT_SUN, IW4::TECHNIQUE_LIT_SUN},
+			{IW3::TECHNIQUE_LIT_SUN_SHADOW, IW4::TECHNIQUE_LIT_SUN_SHADOW},
+			{IW3::TECHNIQUE_LIT_SPOT, IW4::TECHNIQUE_LIT_SPOT},
+			{IW3::TECHNIQUE_LIT_SPOT_SHADOW, IW4::TECHNIQUE_LIT_SPOT_SHADOW},
+			{IW3::TECHNIQUE_LIT_OMNI, IW4::TECHNIQUE_LIT_OMNI},
+			{IW3::TECHNIQUE_LIT_OMNI_SHADOW, IW4::TECHNIQUE_LIT_OMNI_SHADOW},
+			{IW3::TECHNIQUE_LIT_INSTANCED, IW4::TECHNIQUE_LIT_INSTANCED},
+			{IW3::TECHNIQUE_LIT_INSTANCED_SUN, IW4::TECHNIQUE_LIT_INSTANCED_SUN},
+			{IW3::TECHNIQUE_LIT_INSTANCED_SUN_SHADOW, IW4::TECHNIQUE_LIT_INSTANCED_SUN_SHADOW},
+			{IW3::TECHNIQUE_LIT_INSTANCED_SPOT, IW4::TECHNIQUE_LIT_INSTANCED_SPOT},
+			{IW3::TECHNIQUE_LIT_INSTANCED_OMNI, IW4::TECHNIQUE_LIT_INSTANCED_OMNI},
+			{IW3::TECHNIQUE_LIT_END, IW4::TECHNIQUE_LIT_END},
+			{IW3::TECHNIQUE_LIGHT_SPOT, IW4::TECHNIQUE_LIGHT_SPOT},
+			{IW3::TECHNIQUE_LIGHT_OMNI, IW4::TECHNIQUE_LIGHT_OMNI},
+			{IW3::TECHNIQUE_LIGHT_SPOT_SHADOW, IW4::TECHNIQUE_LIGHT_SPOT_SHADOW},
+			{IW3::TECHNIQUE_FAKELIGHT_NORMAL, IW4::TECHNIQUE_FAKELIGHT_NORMAL},
+			{IW3::TECHNIQUE_FAKELIGHT_VIEW, IW4::TECHNIQUE_FAKELIGHT_VIEW},
+			{IW3::TECHNIQUE_SUNLIGHT_PREVIEW, IW4::TECHNIQUE_SUNLIGHT_PREVIEW},
+			{IW3::TECHNIQUE_CASE_TEXTURE, IW4::TECHNIQUE_CASE_TEXTURE},
+			{IW3::TECHNIQUE_WIREFRAME_SOLID, IW4::TECHNIQUE_WIREFRAME_SOLID},
+			{IW3::TECHNIQUE_WIREFRAME_SHADED, IW4::TECHNIQUE_WIREFRAME_SHADED},
+			{IW3::TECHNIQUE_SHADOWCOOKIE_CASTER, 0xFFFFFFFF},
+			{IW3::TECHNIQUE_SHADOWCOOKIE_RECEIVER, 0xFFFFFFFF},
+			{IW3::TECHNIQUE_DEBUG_BUMPMAP, IW4::TECHNIQUE_DEBUG_BUMPMAP},
+			{IW3::TECHNIQUE_DEBUG_BUMPMAP_INSTANCED, IW4::TECHNIQUE_DEBUG_BUMPMAP_INSTANCED},
+			{IW3::TECHNIQUE_COUNT, IW4::TECHNIQUE_COUNT},
+			{IW3::TECHNIQUE_TOTAL_COUNT, IW4::TECHNIQUE_TOTAL_COUNT},
+			{IW3::TECHNIQUE_NONE, IW4::TECHNIQUE_NONE},
+		};
+
+		std::unordered_map<std::int32_t, std::int32_t> iw3_code_const_map =
+		{
+			{IW3::CONST_SRC_CODE_MAYBE_DIRTY_PS_BEGIN, IW4::CONST_SRC_CODE_MAYBE_DIRTY_PS_BEGIN},
+			{IW3::CONST_SRC_CODE_LIGHT_POSITION, IW4::CONST_SRC_CODE_LIGHT_POSITION},
+			{IW3::CONST_SRC_CODE_LIGHT_DIFFUSE, IW4::CONST_SRC_CODE_LIGHT_DIFFUSE},
+			{IW3::CONST_SRC_CODE_LIGHT_SPECULAR, IW4::CONST_SRC_CODE_LIGHT_SPECULAR},
+			{IW3::CONST_SRC_CODE_LIGHT_SPOTDIR, IW4::CONST_SRC_CODE_LIGHT_SPOTDIR},
+			{IW3::CONST_SRC_CODE_LIGHT_SPOTFACTORS, IW4::CONST_SRC_CODE_LIGHT_SPOTFACTORS},
+			{IW3::CONST_SRC_CODE_NEARPLANE_ORG, IW4::CONST_SRC_CODE_NEARPLANE_ORG},
+			{IW3::CONST_SRC_CODE_NEARPLANE_DX, IW4::CONST_SRC_CODE_NEARPLANE_DX},
+			{IW3::CONST_SRC_CODE_NEARPLANE_DY, IW4::CONST_SRC_CODE_NEARPLANE_DY},
+			// { IW3::CONST_SRC_CODE_SHADOW_PARMS, IW4::CONST_SRC_CODE_SHADOW_PARAMS },
+			{IW3::CONST_SRC_CODE_SHADOWMAP_POLYGON_OFFSET, IW4::CONST_SRC_CODE_SHADOWMAP_POLYGON_OFFSET},
+			{IW3::CONST_SRC_CODE_RENDER_TARGET_SIZE, IW4::CONST_SRC_CODE_RENDER_TARGET_SIZE},
+			{IW3::CONST_SRC_CODE_LIGHT_FALLOFF_PLACEMENT, IW4::CONST_SRC_CODE_LIGHT_FALLOFF_PLACEMENT},
 			{
-				return;
-			}
-
-			Json jsonfile;
-
-			jsonfile["type"] = 2;
-
-			jsonfile["hdr"]["name"] = asset->hdr.name;
-			jsonfile["hdr"]["numPasses"] = asset->hdr.numPasses;
-			jsonfile["hdr"]["flags"] = asset->hdr.flags;
-
-			for (auto pass = 0u; pass < asset->hdr.numPasses; pass++)
+				IW3::CONST_SRC_CODE_DOF_EQUATION_VIEWMODEL_AND_FAR_BLUR,
+				IW4::CONST_SRC_CODE_DOF_EQUATION_VIEWMODEL_AND_FAR_BLUR
+			},
+			{IW3::CONST_SRC_CODE_DOF_EQUATION_SCENE, IW4::CONST_SRC_CODE_DOF_EQUATION_SCENE},
+			{IW3::CONST_SRC_CODE_DOF_LERP_SCALE, IW4::CONST_SRC_CODE_DOF_LERP_SCALE},
+			{IW3::CONST_SRC_CODE_DOF_LERP_BIAS, IW4::CONST_SRC_CODE_DOF_LERP_BIAS},
+			{IW3::CONST_SRC_CODE_DOF_ROW_DELTA, IW4::CONST_SRC_CODE_DOF_ROW_DELTA},
+			{IW3::CONST_SRC_CODE_PARTICLE_CLOUD_COLOR, IW4::CONST_SRC_CODE_PARTICLE_CLOUD_COLOR},
+			{IW3::CONST_SRC_CODE_GAMETIME, IW4::CONST_SRC_CODE_GAMETIME},
+			{IW3::CONST_SRC_CODE_MAYBE_DIRTY_PS_END, IW4::CONST_SRC_CODE_MAYBE_DIRTY_PS_END},
+			{IW3::CONST_SRC_CODE_ALWAYS_DIRTY_PS_BEGIN, IW4::CONST_SRC_CODE_ALWAYS_DIRTY_PS_BEGIN},
+			{IW3::CONST_SRC_CODE_PIXEL_COST_FRACS, IW4::CONST_SRC_CODE_PIXEL_COST_FRACS},
+			{IW3::CONST_SRC_CODE_PIXEL_COST_DECODE, IW4::CONST_SRC_CODE_PIXEL_COST_DECODE},
+			{IW3::CONST_SRC_CODE_FILTER_TAP_0, IW4::CONST_SRC_CODE_FILTER_TAP_0},
+			{IW3::CONST_SRC_CODE_FILTER_TAP_1, IW4::CONST_SRC_CODE_FILTER_TAP_1},
+			{IW3::CONST_SRC_CODE_FILTER_TAP_2, IW4::CONST_SRC_CODE_FILTER_TAP_2},
+			{IW3::CONST_SRC_CODE_FILTER_TAP_3, IW4::CONST_SRC_CODE_FILTER_TAP_3},
+			{IW3::CONST_SRC_CODE_FILTER_TAP_4, IW4::CONST_SRC_CODE_FILTER_TAP_4},
+			{IW3::CONST_SRC_CODE_FILTER_TAP_5, IW4::CONST_SRC_CODE_FILTER_TAP_5},
+			{IW3::CONST_SRC_CODE_FILTER_TAP_6, IW4::CONST_SRC_CODE_FILTER_TAP_6},
+			{IW3::CONST_SRC_CODE_FILTER_TAP_7, IW4::CONST_SRC_CODE_FILTER_TAP_7},
+			{IW3::CONST_SRC_CODE_COLOR_MATRIX_R, IW4::CONST_SRC_CODE_COLOR_MATRIX_R},
+			{IW3::CONST_SRC_CODE_COLOR_MATRIX_G, IW4::CONST_SRC_CODE_COLOR_MATRIX_G},
+			{IW3::CONST_SRC_CODE_COLOR_MATRIX_B, IW4::CONST_SRC_CODE_COLOR_MATRIX_B},
+			{IW3::CONST_SRC_CODE_ALWAYS_DIRTY_PS_END, IW4::CONST_SRC_CODE_ALWAYS_DIRTY_PS_END},
+			// { IW3::CONST_SRC_CODE_NEVER_DIRTY_PS_BEGIN, IW4::CONST_SRC_CODE_ },
+			{IW3::CONST_SRC_CODE_SHADOWMAP_SWITCH_PARTITION, IW4::CONST_SRC_CODE_SHADOWMAP_SWITCH_PARTITION},
+			{IW3::CONST_SRC_CODE_SHADOWMAP_SCALE, IW4::CONST_SRC_CODE_SHADOWMAP_SCALE},
+			{IW3::CONST_SRC_CODE_ZNEAR, IW4::CONST_SRC_CODE_ZNEAR},
+			{IW3::CONST_SRC_CODE_SUN_POSITION, IW4::CONST_SRC_CODE_LIGHT_POSITION},
+			{IW3::CONST_SRC_CODE_SUN_DIFFUSE, IW4::CONST_SRC_CODE_LIGHT_DIFFUSE},
+			{IW3::CONST_SRC_CODE_SUN_SPECULAR, IW4::CONST_SRC_CODE_LIGHT_SPECULAR},
+			{IW3::CONST_SRC_CODE_LIGHTING_LOOKUP_SCALE, IW4::CONST_SRC_CODE_LIGHTING_LOOKUP_SCALE},
+			{IW3::CONST_SRC_CODE_DEBUG_BUMPMAP, IW4::CONST_SRC_CODE_DEBUG_BUMPMAP},
+			{IW3::CONST_SRC_CODE_MATERIAL_COLOR, IW4::CONST_SRC_CODE_MATERIAL_COLOR},
+			{IW3::CONST_SRC_CODE_FOG, IW4::CONST_SRC_CODE_FOG},
+			{IW3::CONST_SRC_CODE_FOG_COLOR, IW4::CONST_SRC_CODE_FOG_COLOR_LINEAR},
+			{IW3::CONST_SRC_CODE_GLOW_SETUP, IW4::CONST_SRC_CODE_GLOW_SETUP},
+			{IW3::CONST_SRC_CODE_GLOW_APPLY, IW4::CONST_SRC_CODE_GLOW_APPLY},
+			{IW3::CONST_SRC_CODE_COLOR_BIAS, IW4::CONST_SRC_CODE_COLOR_BIAS},
+			{IW3::CONST_SRC_CODE_COLOR_TINT_BASE, IW4::CONST_SRC_CODE_COLOR_TINT_BASE},
+			{IW3::CONST_SRC_CODE_COLOR_TINT_DELTA, IW4::CONST_SRC_CODE_COLOR_TINT_DELTA},
+			{IW3::CONST_SRC_CODE_OUTDOOR_FEATHER_PARMS, IW4::CONST_SRC_CODE_OUTDOOR_FEATHER_PARMS},
+			{IW3::CONST_SRC_CODE_ENVMAP_PARMS, IW4::CONST_SRC_CODE_ENVMAP_PARMS},
+			{IW3::CONST_SRC_CODE_SPOT_SHADOWMAP_PIXEL_ADJUST, IW4::CONST_SRC_CODE_SPOT_SHADOWMAP_PIXEL_ADJUST},
+			{IW3::CONST_SRC_CODE_CLIP_SPACE_LOOKUP_SCALE, IW4::CONST_SRC_CODE_CLIP_SPACE_LOOKUP_SCALE},
+			{IW3::CONST_SRC_CODE_CLIP_SPACE_LOOKUP_OFFSET, IW4::CONST_SRC_CODE_CLIP_SPACE_LOOKUP_OFFSET},
+			{IW3::CONST_SRC_CODE_PARTICLE_CLOUD_MATRIX, IW4::CONST_SRC_CODE_PARTICLE_CLOUD_MATRIX0},
+			{IW3::CONST_SRC_CODE_DEPTH_FROM_CLIP, IW4::CONST_SRC_CODE_DEPTH_FROM_CLIP},
+			{IW3::CONST_SRC_CODE_CODE_MESH_ARG_0, IW4::CONST_SRC_CODE_CODE_MESH_ARG_0},
+			{IW3::CONST_SRC_CODE_CODE_MESH_ARG_1, IW4::CONST_SRC_CODE_CODE_MESH_ARG_1},
+			{IW3::CONST_SRC_CODE_CODE_MESH_ARG_LAST, IW4::CONST_SRC_CODE_CODE_MESH_ARG_LAST},
+			{IW3::CONST_SRC_CODE_BASE_LIGHTING_COORDS, IW4::CONST_SRC_CODE_BASE_LIGHTING_COORDS},
+			// { IW3::CONST_SRC_CODE_NEVER_DIRTY_PS_END, IW4::CONST_SRC_CODE_NEVER_DIRTY_PS },
+			{IW3::CONST_SRC_CODE_COUNT_FLOAT4, IW4::CONST_SRC_CODE_COUNT_FLOAT4},
+			{IW3::CONST_SRC_FIRST_CODE_MATRIX, IW4::CONST_SRC_FIRST_CODE_MATRIX},
+			{IW3::CONST_SRC_CODE_WORLD_MATRIX, IW4::CONST_SRC_CODE_WORLD_MATRIX0},
+			{IW3::CONST_SRC_CODE_INVERSE_WORLD_MATRIX, IW4::CONST_SRC_CODE_INVERSE_WORLD_MATRIX0},
+			{IW3::CONST_SRC_CODE_TRANSPOSE_WORLD_MATRIX, IW4::CONST_SRC_CODE_TRANSPOSE_WORLD_MATRIX0},
+			{IW3::CONST_SRC_CODE_INVERSE_TRANSPOSE_WORLD_MATRIX, IW4::CONST_SRC_CODE_INVERSE_TRANSPOSE_WORLD_MATRIX0},
+			{IW3::CONST_SRC_CODE_VIEW_MATRIX, IW4::CONST_SRC_CODE_VIEW_MATRIX},
+			{IW3::CONST_SRC_CODE_INVERSE_VIEW_MATRIX, IW4::CONST_SRC_CODE_INVERSE_VIEW_MATRIX},
+			{IW3::CONST_SRC_CODE_TRANSPOSE_VIEW_MATRIX, IW4::CONST_SRC_CODE_TRANSPOSE_VIEW_MATRIX},
+			{IW3::CONST_SRC_CODE_INVERSE_TRANSPOSE_VIEW_MATRIX, IW4::CONST_SRC_CODE_INVERSE_TRANSPOSE_VIEW_MATRIX},
+			{IW3::CONST_SRC_CODE_PROJECTION_MATRIX, IW4::CONST_SRC_CODE_PROJECTION_MATRIX},
+			{IW3::CONST_SRC_CODE_INVERSE_PROJECTION_MATRIX, IW4::CONST_SRC_CODE_INVERSE_PROJECTION_MATRIX},
+			{IW3::CONST_SRC_CODE_TRANSPOSE_PROJECTION_MATRIX, IW4::CONST_SRC_CODE_TRANSPOSE_PROJECTION_MATRIX},
 			{
-				if (asset->pass[pass].vertexDecl)
-				{
-					auto vertexDeclName = GenerateNameForVertexDecl(asset->pass[pass].vertexDecl);
-					jsonfile["pass"][pass]["VertexDecl"] = vertexDeclName;
-					dumpVertexDecl(&vertexDeclName[0], asset->pass[pass].vertexDecl);
-				}
-				else
-				{
-					jsonfile["pass"][pass]["VertexDecl"] = nullptr;
-				}
+				IW3::CONST_SRC_CODE_INVERSE_TRANSPOSE_PROJECTION_MATRIX,
+				IW4::CONST_SRC_CODE_INVERSE_TRANSPOSE_PROJECTION_MATRIX
+			},
+			{IW3::CONST_SRC_CODE_WORLD_VIEW_MATRIX, IW4::CONST_SRC_CODE_WORLD_VIEW_MATRIX0},
+			{IW3::CONST_SRC_CODE_INVERSE_WORLD_VIEW_MATRIX, IW4::CONST_SRC_CODE_INVERSE_WORLD_VIEW_MATRIX0},
+			{IW3::CONST_SRC_CODE_TRANSPOSE_WORLD_VIEW_MATRIX, IW4::CONST_SRC_CODE_TRANSPOSE_WORLD_VIEW_MATRIX0},
+			{
+				IW3::CONST_SRC_CODE_INVERSE_TRANSPOSE_WORLD_VIEW_MATRIX,
+				IW4::CONST_SRC_CODE_INVERSE_TRANSPOSE_WORLD_VIEW_MATRIX0
+			},
+			{IW3::CONST_SRC_CODE_VIEW_PROJECTION_MATRIX, IW4::CONST_SRC_CODE_VIEW_PROJECTION_MATRIX},
+			{IW3::CONST_SRC_CODE_INVERSE_VIEW_PROJECTION_MATRIX, IW4::CONST_SRC_CODE_INVERSE_VIEW_PROJECTION_MATRIX},
+			{
+				IW3::CONST_SRC_CODE_TRANSPOSE_VIEW_PROJECTION_MATRIX,
+				IW4::CONST_SRC_CODE_TRANSPOSE_VIEW_PROJECTION_MATRIX
+			},
+			{
+				IW3::CONST_SRC_CODE_INVERSE_TRANSPOSE_VIEW_PROJECTION_MATRIX,
+				IW4::CONST_SRC_CODE_INVERSE_TRANSPOSE_VIEW_PROJECTION_MATRIX
+			},
+			{IW3::CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX, IW4::CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX0},
+			{
+				IW3::CONST_SRC_CODE_INVERSE_WORLD_VIEW_PROJECTION_MATRIX,
+				IW4::CONST_SRC_CODE_INVERSE_WORLD_VIEW_PROJECTION_MATRIX0
+			},
+			{
+				IW3::CONST_SRC_CODE_TRANSPOSE_WORLD_VIEW_PROJECTION_MATRIX,
+				IW4::CONST_SRC_CODE_TRANSPOSE_WORLD_VIEW_PROJECTION_MATRIX0
+			},
+			{
+				IW3::CONST_SRC_CODE_INVERSE_TRANSPOSE_WORLD_VIEW_PROJECTION_MATRIX,
+				IW4::CONST_SRC_CODE_INVERSE_TRANSPOSE_WORLD_VIEW_PROJECTION_MATRIX0
+			},
+			{IW3::CONST_SRC_CODE_SHADOW_LOOKUP_MATRIX, IW4::CONST_SRC_CODE_SHADOW_LOOKUP_MATRIX},
+			{IW3::CONST_SRC_CODE_INVERSE_SHADOW_LOOKUP_MATRIX, IW4::CONST_SRC_CODE_INVERSE_SHADOW_LOOKUP_MATRIX},
+			{IW3::CONST_SRC_CODE_TRANSPOSE_SHADOW_LOOKUP_MATRIX, IW4::CONST_SRC_CODE_TRANSPOSE_SHADOW_LOOKUP_MATRIX},
+			{
+				IW3::CONST_SRC_CODE_INVERSE_TRANSPOSE_SHADOW_LOOKUP_MATRIX,
+				IW4::CONST_SRC_CODE_INVERSE_TRANSPOSE_SHADOW_LOOKUP_MATRIX
+			},
+			{IW3::CONST_SRC_CODE_WORLD_OUTDOOR_LOOKUP_MATRIX, IW4::CONST_SRC_CODE_WORLD_OUTDOOR_LOOKUP_MATRIX},
+			{
+				IW3::CONST_SRC_CODE_INVERSE_WORLD_OUTDOOR_LOOKUP_MATRIX,
+				IW4::CONST_SRC_CODE_INVERSE_WORLD_OUTDOOR_LOOKUP_MATRIX
+			},
+			{
+				IW3::CONST_SRC_CODE_TRANSPOSE_WORLD_OUTDOOR_LOOKUP_MATRIX,
+				IW4::CONST_SRC_CODE_TRANSPOSE_WORLD_OUTDOOR_LOOKUP_MATRIX
+			},
+			{
+				IW3::CONST_SRC_CODE_INVERSE_TRANSPOSE_WORLD_OUTDOOR_LOOKUP_MATRIX,
+				IW4::CONST_SRC_CODE_INVERSE_TRANSPOSE_WORLD_OUTDOOR_LOOKUP_MATRIX
+			},
+			{IW3::CONST_SRC_TOTAL_COUNT, IW4::CONST_SRC_TOTAL_COUNT},
+			{IW3::CONST_SRC_NONE, IW4::CONST_SRC_NONE},
+		};
 
-				if (asset->pass[pass].pixelShader)
-				{
-					jsonfile["pass"][pass]["PixelShader"] = asset->pass[pass].pixelShader->name;
-					dumpPixelShader(asset->pass[pass].pixelShader);
-				}
-				else
-				{
-					jsonfile["pass"][pass]["PixelShader"] = nullptr;
-				}
+		void ITechset::dump_statebits(const std::string& techset, char* statebits)
+		{
+			char iw4_statebits[48];
+			memset(iw4_statebits, 0xFF, sizeof iw4_statebits);
 
-				if (asset->pass[pass].vertexShader)
+			for (int i = 0; i < 34; i++)
+			{
+				const auto itr = iw3_technique_map.find(i);
+				if (itr != iw3_technique_map.end())
 				{
-					jsonfile["pass"][pass]["VertexShader"] = asset->pass[pass].vertexShader->name;
-					dumpVertexShader(asset->pass[pass].vertexShader);
-				}
-				else
-				{
-					jsonfile["pass"][pass]["VertexShader"] = nullptr;
-				}
-
-				jsonfile["pass"][pass]["perPrimArgCount"] = asset->pass[pass].perPrimArgCount;
-				jsonfile["pass"][pass]["perObjArgCount"] = asset->pass[pass].perObjArgCount;
-				jsonfile["pass"][pass]["stableArgCount"] = asset->pass[pass].stableArgCount;
-				jsonfile["pass"][pass]["customSamplerFlags"] = asset->pass[pass].customSamplerFlags;
-
-				for (auto a = 0u; a < asset->pass[pass].perPrimArgCount +
-				     asset->pass[pass].perObjArgCount +
-				     asset->pass[pass].stableArgCount; a++)
-				{
-					auto arg = &asset->pass[pass].args[a];
-
-					jsonfile["pass"][pass]["argumentDef"][a]["dest"] = arg->dest;
-					jsonfile["pass"][pass]["argumentDef"][a]["type"] = arg->type;
-
-					if (arg->type == 1 || arg->type == 7)
+					if (itr->second >= 0)
 					{
-						if (arg->u.literalConst != nullptr)
+						iw4_statebits[itr->second] = statebits[i];
+
+						if (iw4_statebits[itr->second] >= 7)
 						{
-							for (size_t j = 0; j < 4; j++)
+							iw4_statebits[itr->second] += 1;
+						}
+						
+						if (itr->second >= 5 && itr->second <= 36)
+						{
+							iw4_statebits[itr->second + 1] = iw4_statebits[itr->second];
+						}
+					}
+				}
+			}
+			
+			IW4::ITechset::dump_statebits(techset, iw4_statebits);
+		}
+		
+		void ITechset::dump(MaterialTechniqueSet* asset, ZoneMemory* mem)
+		{
+			auto iw4_techset = mem->Alloc<IW4::MaterialTechniqueSet>();
+
+			iw4_techset->name = asset->name;
+			iw4_techset->pad = asset->pad;
+			
+			for (int i = 0; i < 34; i++)
+			{
+				const auto itr = iw3_technique_map.find(i);
+				if (itr != iw3_technique_map.end())
+				{
+					if (asset->techniques[i] && itr->second >= 0)
+					{
+						const auto size = sizeof(IW4::MaterialTechniqueHeader) + (sizeof(IW4::MaterialPass) * asset->techniques[i]->hdr.numPasses);
+						iw4_techset->techniques[itr->second] = reinterpret_cast<IW4::MaterialTechnique*>(
+							new char[size]);
+
+						if (itr->second >= 5 && itr->second <= 36)
+						{
+							iw4_techset->techniques[itr->second + 1] = iw4_techset->techniques[itr->second];
+						}
+						
+						memcpy(iw4_techset->techniques[itr->second], asset->techniques[i], size);
+
+						auto& iw3_technique = asset->techniques[i];
+						auto& technique = iw4_techset->techniques[itr->second];
+						
+						for (short pass = 0; pass < technique->hdr.numPasses; pass++)
+						{
+							const auto iw3_pass_def = &iw3_technique->pass[pass];
+							const auto pass_def = &technique->pass[pass];
+
+							auto vertex_decl_name = GenerateNameForVertexDecl(iw3_pass_def->vertexDecl);
+
+							if (iw3_pass_def->pixelShader) pass_def->pixelShader = dump_pixel_shader(iw3_pass_def->pixelShader, mem);
+							if (iw3_pass_def->vertexDecl) pass_def->vertexDecl = dump_vertex_decl(vertex_decl_name, iw3_pass_def->vertexDecl, mem);
+							if (iw3_pass_def->vertexShader) pass_def->vertexShader = dump_vertex_shader(iw3_pass_def->vertexShader, mem);
+
+							const auto arg_count = pass_def->perPrimArgCount + pass_def->perObjArgCount + pass_def->stableArgCount;
+							if (arg_count > 0)
 							{
-								jsonfile["pass"][pass]["argumentDef"][a]["value"][j] = arg->u.literalConst[j];
+								pass_def->argumentDef = mem->Alloc<IW4::ShaderArgumentDef>(arg_count);
+								memcpy(pass_def->argumentDef, iw3_pass_def->args, sizeof(IW4::ShaderArgumentDef) * arg_count);
+							}
+							
+							for (auto arg = 0; arg < pass_def->perPrimArgCount + pass_def->perObjArgCount + pass_def->stableArgCount; arg++)
+							{
+								const auto arg_def = &pass_def->argumentDef[arg];
+								if (arg_def->type == 3 || arg_def->type == 5)
+								{
+									if (iw3_code_const_map.find(arg_def->u.codeConst.index) != iw3_code_const_map.end())
+									{
+										arg_def->u.codeConst.index = iw3_code_const_map[arg_def->u.codeConst.index];
+									}
+								}
 							}
 						}
-						else
-						{
-							jsonfile["pass"][pass]["argumentDef"][a]["value"] = nullptr;
-						}
-					}
-					else if (arg->type == 3 || arg->type == 5)
-					{
-						jsonfile["pass"][pass]["argumentDef"][a]["value"]["firstRow"] = arg->u.codeConst.firstRow;
-						jsonfile["pass"][pass]["argumentDef"][a]["value"]["rowCount"] = arg->u.codeConst.rowCount;
-						jsonfile["pass"][pass]["argumentDef"][a]["value"]["index"] = arg->u.codeConst.index;
-					}
-					else
-					{
-						jsonfile["pass"][pass]["argumentDef"][a]["value"] = arg->u.codeSampler;
 					}
 				}
 			}
 
-			// Write JSON Object to file
-			auto ob = Json(jsonfile).dump();
-			fwrite(&ob[0], ob.size(), 1, fp);
-			fflush(fp);
-			fclose(fp);
-		}
-
-		void ITechset::dump(MaterialTechniqueSet* asset)
-		{
-			auto fp = FileSystem::FileOpen("techsets\\"s + asset->name + ".techset"s, "wb");
-			if (!fp)
-			{
-				return;
-			}
-
-			constexpr auto numTechniques = sizeof(asset->techniques) / sizeof(MaterialTechnique*);
-
-			std::map<std::string, Json> jsonfile;
-
-			jsonfile["name"] = asset->name;
-			jsonfile["pad"] = asset->pad;
-			jsonfile["type"] = 2;
-
-			for (auto i = 0u; i < numTechniques; i++)
-			{
-				if (asset->techniques[i])
-				{
-					jsonfile["techniques"][i]["name"] = asset->techniques[i]->hdr.name;
-					jsonfile["techniques"][i]["index"] = i;
-
-					dumpTechniquePass(asset->techniques[i]);
-				}
-				else
-				{
-					jsonfile["techniques"][i] = nullptr;
-				}
-			}
-
-			// Write JSON Object to file
-			auto ob = Json(jsonfile).dump();
-			fwrite(&ob[0], ob.size(), 1, fp);
-			fflush(fp);
-			fclose(fp);
+			IW4::ITechset::dump(iw4_techset);
 		}
 	}
 }

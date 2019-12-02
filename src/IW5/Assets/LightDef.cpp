@@ -20,7 +20,7 @@ namespace ZoneTool
 		{
 		}
 
-		void ILightDef::parseLightImage(GfxLightImage* image, nlohmann::json& data, std::shared_ptr<ZoneMemory>& mem)
+		void ILightDef::parseLightImage(GfxLightImage* image, nlohmann::json& data, ZoneMemory* mem)
 		{
 			if (data["image"].is_string())
 			{
@@ -36,7 +36,7 @@ namespace ZoneTool
 			image->samplerState = data["samplerState"].get<char>();
 		}
 
-		GfxLightDef* ILightDef::parse(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		GfxLightDef* ILightDef::parse(const std::string& name, ZoneMemory* mem)
 		{
 			auto path = "lights/"s + name + ".lightdef"s;
 			if (FileSystem::FileExists(path))
@@ -66,38 +66,38 @@ namespace ZoneTool
 			return nullptr;
 		}
 
-		void ILightDef::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void ILightDef::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = this->parse(name, mem);
+			this->name_ = name;
+			this->asset_ = this->parse(name, mem);
 
-			if (!this->m_asset)
+			if (!this->asset_)
 			{
-				this->m_asset = DB_FindXAssetHeader(this->type(), this->name().data(), 1).lightdef;
+				this->asset_ = DB_FindXAssetHeader(this->type(), this->name().data(), 1).lightdef;
 			}
 		}
 
-		void ILightDef::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void ILightDef::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
 		void ILightDef::load_depending(IZone* zone)
 		{
-			auto asset = this->m_asset;
+			auto asset = this->asset_;
 
 			if (asset->attenuation.image)
 			{
-				zone->AddAssetOfType(image, asset->attenuation.image->name);
+				zone->add_asset_of_type(image, asset->attenuation.image->name);
 			}
 			if (asset->cucoloris.image)
 			{
-				zone->AddAssetOfType(image, asset->cucoloris.image->name);
+				zone->add_asset_of_type(image, asset->cucoloris.image->name);
 			}
 		}
 
 		std::string ILightDef::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t ILightDef::type()
@@ -105,11 +105,11 @@ namespace ZoneTool
 			return lightdef;
 		}
 
-		void ILightDef::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void ILightDef::write(IZone* zone, ZoneBuffer* buf)
 		{
 			assert(sizeof(GfxLightDef), 24);
 
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write(data);
 
 			buf->push_stream(3);
@@ -119,12 +119,12 @@ namespace ZoneTool
 
 			if (data->attenuation.image)
 			{
-				dest->attenuation.image = reinterpret_cast<GfxImage*>(zone->GetAssetPointer(
+				dest->attenuation.image = reinterpret_cast<GfxImage*>(zone->get_asset_pointer(
 					image, data->attenuation.image->name));
 			}
 			if (data->cucoloris.image)
 			{
-				dest->cucoloris.image = reinterpret_cast<GfxImage*>(zone->GetAssetPointer(
+				dest->cucoloris.image = reinterpret_cast<GfxImage*>(zone->get_asset_pointer(
 					image, data->cucoloris.image->name));
 			}
 

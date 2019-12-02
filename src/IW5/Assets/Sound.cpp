@@ -37,7 +37,7 @@ namespace ZoneTool
 		{
 		}
 
-		void SndAlias_Parse(snd_alias_t* asset, nlohmann::json snddata, std::shared_ptr<ZoneMemory>& mem)
+		void SndAlias_Parse(snd_alias_t* asset, nlohmann::json snddata, ZoneMemory* mem)
 		{
 			SOUND_STRING(aliasName);
 			SOUND_STRING(subtitle);
@@ -155,7 +155,7 @@ namespace ZoneTool
 			}
 		}
 
-		snd_alias_list_t* ISound::parse(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		snd_alias_list_t* ISound::parse(const std::string& name, ZoneMemory* mem)
 		{
 			if (name.empty())
 			{
@@ -194,24 +194,24 @@ namespace ZoneTool
 			return nullptr;
 		}
 
-		void ISound::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void ISound::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = this->parse(name, mem);
+			this->name_ = name;
+			this->asset_ = this->parse(name, mem);
 
-			if (!this->m_asset)
+			if (!this->asset_)
 			{
-				this->m_asset = DB_FindXAssetHeader(this->type(), this->name().data(), 1).sound;
+				this->asset_ = DB_FindXAssetHeader(this->type(), this->name().data(), 1).sound;
 			}
 		}
 
-		void ISound::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void ISound::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
 		void ISound::load_depending(IZone* zone)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 
 			for (auto i = 0u; i < data->count; i++)
 			{
@@ -219,14 +219,14 @@ namespace ZoneTool
 
 				if (head->volumeFalloffCurve)
 				{
-					zone->AddAssetOfType(sndcurve, head->volumeFalloffCurve->name);
+					zone->add_asset_of_type(sndcurve, head->volumeFalloffCurve->name);
 				}
 
 				if (head->soundFile)
 				{
 					if (head->soundFile->type == SAT_LOADED)
 					{
-						zone->AddAssetOfType(loaded_sound, head->soundFile->sound.loadSnd->name);
+						zone->add_asset_of_type(loaded_sound, head->soundFile->sound.loadSnd->name);
 					}
 				}
 			}
@@ -234,7 +234,7 @@ namespace ZoneTool
 
 		std::string ISound::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t ISound::type()
@@ -242,7 +242,7 @@ namespace ZoneTool
 			return sound;
 		}
 
-		void ISound::write_soundfile(IZone* zone, std::shared_ptr<ZoneBuffer>& buf, SoundFile* data)
+		void ISound::write_soundfile(IZone* zone, ZoneBuffer* buf, SoundFile* data)
 		{
 			auto dest = buf->write(data);
 
@@ -262,13 +262,13 @@ namespace ZoneTool
 			{
 				if (data->sound.loadSnd)
 				{
-					dest->sound.loadSnd = reinterpret_cast<LoadedSound*>(zone->GetAssetPointer(
+					dest->sound.loadSnd = reinterpret_cast<LoadedSound*>(zone->get_asset_pointer(
 						loaded_sound, data->sound.loadSnd->name));
 				}
 			}
 		}
 
-		void ISound::write_head(IZone* zone, std::shared_ptr<ZoneBuffer>& buf, snd_alias_t* dest)
+		void ISound::write_head(IZone* zone, ZoneBuffer* buf, snd_alias_t* dest)
 		{
 			auto data = dest;
 
@@ -306,7 +306,7 @@ namespace ZoneTool
 
 			if (data->volumeFalloffCurve)
 			{
-				dest->volumeFalloffCurve = reinterpret_cast<SndCurve*>(zone->GetAssetPointer(
+				dest->volumeFalloffCurve = reinterpret_cast<SndCurve*>(zone->get_asset_pointer(
 					sndcurve, data->volumeFalloffCurve->name));
 			}
 
@@ -324,9 +324,9 @@ namespace ZoneTool
 			}
 		}
 
-		void ISound::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void ISound::write(IZone* zone, ZoneBuffer* buf)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write(data);
 
 			buf->push_stream(3);

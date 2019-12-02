@@ -53,6 +53,77 @@ namespace ZoneTool
 		std::int32_t loadFlags;
 		std::int32_t unloadFlags;
 	};
+
+	struct ScriptStringList
+	{
+		int count;
+		const char** strings;
+	};
+
+	struct XAssetList
+	{
+		ScriptStringList stringList;
+		int assetCount;
+		void* assets;
+	};
+
+	enum class zone_target
+	{
+		pc,
+		xbox360,
+		ps3,
+	};
+	enum class zone_target_version
+	{
+		iw3_alpha_253,
+		iw3_alpha_290,
+		iw3_alpha_328,
+		iw4_alpha_482,
+		iw4_alpha_491,
+		iw4_release,
+		iw4_release_console,
+		iw5_release,
+		max,
+	};
+
+	static std::string zone_target_version_str[8] = 
+	{
+		"iw3_alpha_253",
+		"iw3_alpha_290",
+		"iw3_alpha_328",
+		"iw4_alpha_482",
+		"iw4_alpha_491",
+		"iw4_release",
+		"iw4_release_console",
+		"iw5_release",
+	};
+	
+	static void endian_convert(void* data, const std::size_t size)
+	{
+		if (size <= 0)
+		{
+			return;
+		}
+		
+		// clone data
+		const auto data_clone = new char[size];
+		memcpy(data_clone, data, size);
+
+		// prepare pointers for magic
+		const auto data_clone_ptr = reinterpret_cast<std::uint8_t*>(data_clone);
+		const auto data_ptr = reinterpret_cast<std::uint8_t*>(data);
+
+		for (auto i = 0u; i < size; i++)
+		{
+			data_ptr[i] = data_clone_ptr[size - i - 1];
+		}
+
+		delete[] data_clone;
+	}
+	template <typename T> static void endian_convert(T* data)
+	{
+		return endian_convert(data, sizeof T);
+	}
 #pragma push(pop)
 }
 

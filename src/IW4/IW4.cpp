@@ -8,6 +8,7 @@
 // ========================================================
 #include "stdafx.hpp"
 #include <unordered_map>
+#include "ZoneTool/ZoneTool.hpp"
 
 namespace ZoneTool
 {
@@ -18,17 +19,17 @@ namespace ZoneTool
 		bool isVerifying = false;
 		auto currentDumpingZone = ""s;
 
-		const char* Linker::Version()
+		const char* Linker::version()
 		{
 			return "IW4";
 		}
 
-		bool Linker::InUse()
+		bool Linker::is_used()
 		{
-			return !strncmp(reinterpret_cast<char*>(0x71B85C), this->Version(), 3);
+			return !strncmp(reinterpret_cast<char*>(0x71B85C), this->version(), 3);
 		}
 
-		void Linker::LoadDefaultZones()
+		void Linker::load_default_zones()
 		{
 			static std::vector<std::string> defaultzones =
 			{
@@ -53,7 +54,7 @@ namespace ZoneTool
 			return DB_LoadXAssets(zones, defaultzones.size(), 0);
 		}
 
-		void Linker::Run()
+		void Linker::run()
 		{
 			// function definitions
 			typedef void (__cdecl * Win_InitLocalization_t)(int);
@@ -84,6 +85,9 @@ namespace ZoneTool
 			LargeLocalInit_t LargeLocalInit = (LargeLocalInit_t)0x4A62A0;
 			Cmd_ExecuteSingleCommand_t Cmd_ExecuteSingleCommand = (Cmd_ExecuteSingleCommand_t)0x609540;
 			DWORD G_SetupWeaponDef = 0x4E1F30;
+			DWORD Scr_BeginLoadScripts = 0x4E1ED0;
+			DWORD Scr_BeginLoadScripts2 = 0x4541F0;
+			DWORD Scr_InitAllocNodes = 0x4B8740;
 
 			Sys_InitializeCriticalSections();
 			Sys_InitMainThread();
@@ -95,10 +99,21 @@ namespace ZoneTool
 			DB_InitThread();
 			Com_InitDvars();
 			R_RegisterDvars();
+
+			// gsc stuff
+			__asm call Scr_BeginLoadScripts;
+			__asm
+			{
+				push 0x201A45C;
+				call Scr_BeginLoadScripts2;
+				add esp, 4;
+			}
+			__asm call Scr_InitAllocNodes;
+			
 			LargeLocalInit();
 			FS_Init();
 
-			LoadDefaultZones();
+			load_default_zones();
 
 			// Cmd_RegisterCommands();
 			// ZoneTool_LoadZones(nullptr, 0, 0);
@@ -117,7 +132,7 @@ namespace ZoneTool
 			}
 		}
 
-		const char* Linker::GetAssetName(XAssetType type, XAssetHeader header)
+		const char* Linker::get_asset_name(XAssetType type, XAssetHeader header)
 		{
 			// todo
 			if (type == image)
@@ -136,15 +151,35 @@ namespace ZoneTool
 			return "";
 		}
 
+		void* DB_FindXAssetHeader_Unsafe(const XAssetType type, const std::string& name)
+		{
+			const static auto DB_FindXAssetHeader_Internal = 0x5BB1B0;
+			const auto name_ptr = name.data();
+			const auto type_int = static_cast<std::int32_t>(type);
+
+			const XAsset* asset_header = nullptr;
+
+			__asm
+			{
+				mov edi, type_int;
+				push name_ptr;
+				call DB_FindXAssetHeader_Internal;
+				add esp, 4;
+				mov asset_header, eax;
+			}
+
+			return (asset_header) ? asset_header->ptr.data : nullptr;
+		}
+		
 		void Linker::DB_AddXAsset(XAssetType type, XAssetHeader header)
 		{
-			static std::unordered_map<std::string, std::vector<std::pair<std::string, std::uint32_t>>> mappedShaders;
-
+			static std::vector<std::pair<XAssetType, std::string>> referencedAssets;
+			
 			// nice meme
 			if (isVerifying)
 			{
 				// print asset name to console
-				ZONETOOL_INFO("Loading asset \"%s\" of type %s.", Linker::GetAssetName(type, header), reinterpret_cast<
+				ZONETOOL_INFO("Loading asset \"%s\" of type %s.", Linker::get_asset_name(type, header), reinterpret_cast<
 char**>(0x00799278)[type]);
 			}
 
@@ -174,98 +209,86 @@ char**>(0x00799278)[type]);
 				if (csvFile)
 				{
 					auto xassettypes = reinterpret_cast<char**>(0x00799278);
-					fprintf(csvFile, "%s,%s\n", xassettypes[type], GetAssetName(type, header));
+					fprintf(csvFile, "%s,%s\n", xassettypes[type], get_asset_name(type, header));
 				}
 			}
 
 			if (isDumping)
 			{
-				// dont dump empty assets
-				if (GetAssetName(type, header)[0] == ',')
-				{
-					return;
-				}
-
 				// check if we're done loading the fastfile
-				if (type == rawfile && GetAssetName(type, header) == fastfile)
+				if (type == rawfile && get_asset_name(type, header) == fastfile)
 				{
+					for (auto& ref : referencedAssets)
+					{
+						if (ref.second.length() <= 1 || ref.first == XAssetType::loaded_sound)
+						{
+							continue;
+						}
+
+						const auto asset_name = &ref.second[1];
+						const auto ref_asset = DB_FindXAssetHeader_Unsafe(ref.first, asset_name);
+
+						if (ref_asset == nullptr)
+						{
+							ZONETOOL_ERROR("Could not find referenced asset \"%s\"!", asset_name);
+							continue;
+						}
+
+						ZONETOOL_INFO("Dumping additional asset \"%s\" because it is referenced by %s.", asset_name, currentDumpingZone.data());
+
+						XAssetHeader header;
+						header.data = ref_asset;
+						
+						DB_AddXAsset(ref.first, header);
+					}
+
+					ZONETOOL_INFO("Zone \"%s\" dumped.", &fastfile[0]);
+
+					// clear referenced assets array because we are done dumping
+					referencedAssets.clear();
+
 					// mark dumping as complete to exit the process if it has been started using the command line
 					if (currentDumpingZone == fastfile)
 					{
 						isDumpingComplete = true;
 					}
-
-					auto fp = fopen("mappedShaders.txt", "wb");
-					if (fp)
-					{
-						for (auto& shader : mappedShaders)
-						{
-							fprintf(fp, "shader \"%s\" uses the following amount of arguments per technique:\n",
-							        shader.first.data());
-							for (auto& techset : shader.second)
-							{
-								fprintf(fp, "\t%s - %i\n", techset.first.data(), techset.second);
-							}
-						}
-						fclose(fp);
-					}
-
-					mappedShaders.clear();
-
-					ZONETOOL_INFO("Zone \"%s\" dumped.", &fastfile[0]);
 				}
-				if (type == techset)
+
+				if (get_asset_name(type, header)[0] == ',')
 				{
-					for (int i = 0; i < 48; i++)
-					{
-						if (header.techset->techniques[i])
-						{
-							for (int j = 0; j < header.techset->techniques[i]->hdr.numPasses; j++)
-							{
-								if (header.techset->techniques[i]->pass[j].vertexShader)
-								{
-									mappedShaders[header.techset->techniques[i]->pass[j].vertexShader->name].push_back(
-										{
-											header.techset->name,
-											header.techset->techniques[i]->pass[j].stableArgCount + header
-											                                                        .techset->techniques
-											[i]->pass[j].perObjArgCount +
-											header.techset->techniques[i]->pass[j].perPrimArgCount
-										}
-									);
-								}
-							}
-						}
-					}
+					referencedAssets.push_back({ type, get_asset_name(type, header) });
 				}
-
-				DECLARE_ASSET(phys_collmap, IPhysCollmap);
-				DECLARE_ASSET(tracer, ITracerDef);
-				DECLARE_ASSET(xmodelsurfs, IXSurface);
-				DECLARE_ASSET(xmodel, IXModel);
-				DECLARE_ASSET(material, IMaterial);
-				DECLARE_ASSET(xanim, IXAnimParts);
-				DECLARE_ASSET(techset, ITechset);
-				DECLARE_ASSET(gfx_map, IGfxWorld);
-				DECLARE_ASSET(col_map_mp, IClipMap);
-				DECLARE_ASSET(map_ents, IMapEnts);
-				DECLARE_ASSET(fx_map, IFxWorld);
-				DECLARE_ASSET(com_map, IComWorld);
-				DECLARE_ASSET(sound, ISound);
-				DECLARE_ASSET(sndcurve, ISoundCurve);
-				DECLARE_ASSET(loaded_sound, ILoadedSound);
-				DECLARE_ASSET(rawfile, IRawFile);
-				DECLARE_ASSET(stringtable, IStringTable);
-				DECLARE_ASSET(stringtable, IStringTable);
-				DECLARE_ASSET(vertexdecl, IVertexDecl);
-				DECLARE_ASSET(pixelshader, IPixelShader);
-				DECLARE_ASSET(vertexshader, IVertexShader);
-				DECLARE_ASSET(techset, ITechset);
-				DECLARE_ASSET(game_map_mp, IGameWorldMp);
-				DECLARE_ASSET(image, IGfxImage);
-				DECLARE_ASSET(fx, IFxEffectDef);
-				DECLARE_ASSET(lightdef, ILightDef);
-				DECLARE_ASSET(weapon, IWeaponDef);
+				else
+				{
+					DECLARE_ASSET(phys_collmap, IPhysCollmap);
+					DECLARE_ASSET(tracer, ITracerDef);
+					DECLARE_ASSET(xmodelsurfs, IXSurface);
+					DECLARE_ASSET(xmodel, IXModel);
+					DECLARE_ASSET(material, IMaterial);
+					DECLARE_ASSET(xanim, IXAnimParts);
+					DECLARE_ASSET(techset, ITechset);
+					DECLARE_ASSET(gfx_map, IGfxWorld);
+					DECLARE_ASSET(col_map_mp, IClipMap);
+					DECLARE_ASSET(map_ents, IMapEnts);
+					DECLARE_ASSET(fx_map, IFxWorld);
+					DECLARE_ASSET(com_map, IComWorld);
+					DECLARE_ASSET(sound, ISound);
+					DECLARE_ASSET(sndcurve, ISoundCurve);
+					DECLARE_ASSET(loaded_sound, ILoadedSound);
+					DECLARE_ASSET(rawfile, IRawFile);
+					DECLARE_ASSET(stringtable, IStringTable);
+					DECLARE_ASSET(stringtable, IStringTable);
+					DECLARE_ASSET(vertexdecl, IVertexDecl);
+					DECLARE_ASSET(pixelshader, IPixelShader);
+					DECLARE_ASSET(vertexshader, IVertexShader);
+					DECLARE_ASSET(techset, ITechset);
+					DECLARE_ASSET(game_map_mp, IGameWorldMp);
+					DECLARE_ASSET(image, IGfxImage);
+					DECLARE_ASSET(fx, IFxEffectDef);
+					DECLARE_ASSET(lightdef, ILightDef);
+					DECLARE_ASSET(weapon, IWeaponDef);
+					DECLARE_ASSET(addon_map_ents, IAddonMapEnts);
+				}
 			}
 		}
 
@@ -383,27 +406,135 @@ char**>(0x00799278)[type]);
 			readPosition = 0;
 
 			// read header
-			return Memory::Func<void(void*, int)>(0x00445460)(ptr, size);
+			return Memory::func<void(void*, int)>(0x00445460)(ptr, size);
 		}
 
 		void Linker::Load_XSurfaceArray(int shouldLoad, int count)
 		{
 			// read the actual count from the varXModelSurfs ptr
-			auto surface = *reinterpret_cast<ModelSurface**>(0x0112A95C);
+			auto surface = *reinterpret_cast<XModelSurfs**>(0x0112A95C);
 
 			// call original read function with the correct count
-			return Memory::Func<void(int, int)>(0x004925B0)(shouldLoad, surface->xSurficiesCount);
+			return Memory::func<void(int, int)>(0x004925B0)(shouldLoad, surface->numsurfs);
 		}
+
+        const char* Linker::GetZonePath(const char* zoneName)
+        {
+            static std::string lastZonePath;
+            static std::vector<std::string> zonePaths =
+            {
+                "zone\\dlc\\",
+                "zone\\patch\\"
+            };
+
+            const std::string zoneFileName = zoneName;
+            const char* languageName = Memory::func<const char* ()>(0x45CBA0)();
+
+            // Priority 1: localized zone folder
+            const std::string localizedZonePath = va("zone\\%s\\", languageName, zoneName);
+            if(std::filesystem::exists(localizedZonePath + zoneFileName))
+            {
+                lastZonePath = localizedZonePath;
+                return lastZonePath.c_str();
+            }
+
+            // Priority 2: custom zone paths
+            for(auto customZonePath : zonePaths)
+            {
+                if (std::filesystem::exists(customZonePath + zoneFileName))
+                {
+                    lastZonePath = customZonePath;
+                    return lastZonePath.c_str();
+                }
+            }
+
+            // If no file could be found return the default location. The game will notice itself that there is no fastfile.
+            lastZonePath = localizedZonePath;
+            return lastZonePath.c_str();
+        }
 
 		void ExitZoneTool()
 		{
 			std::exit(0);
 		}
 
-		void Linker::Startup()
+		void gsc_compile_error(int unk, const char* fmt, ...)
 		{
-			if (this->InUse())
+			char error_message[4096] = {};
+			
+			va_list va;
+			va_start(va, fmt);
+			_vsnprintf(error_message, sizeof error_message, fmt, va);
+
+			ZONETOOL_ERROR("script compile error: %s", error_message);
+		}
+
+		void emit_opcode(int opcode, int a2, int a3)
+		{
+			ZONETOOL_INFO("compiling opcode %u", opcode);
+		}
+		
+		void Linker::startup()
+		{
+			if (this->is_used())
 			{
+				// for compiling GSC scripts
+				ZoneTool::register_command("compilescript", [](auto args)
+				{
+					//
+					if (args.size() < 2)
+					{
+						ZONETOOL_INFO("Usage: compilescript <scriptfile>\n");
+						return;
+					}
+
+					if (FileSystem::FileExists(args[1] + ".gsc"))
+					{
+						ZONETOOL_INFO("Compiling script \"%s\"...", args[1].data());
+						
+						auto fp = FileSystem::FileOpen(args[1] + ".gsc", "rb");
+						if (fp)
+						{
+							const auto file_size = FileSystem::FileSize(fp);
+							const auto bytes = FileSystem::ReadBytes(fp, file_size);
+							auto bytes_ptr = bytes.data();
+
+							// set bytes ptr
+							Memory(0x1CFEEE8).set(bytes_ptr);
+
+							// patch current thread
+							Memory(0x1CDE7FC).set(GetCurrentThreadId());
+
+							// load gsc
+							Function<void(const char*, int, int)>(0x427D00)(args[1].data(), 0, 0);
+							
+							FileSystem::FileClose(fp);
+
+							ZONETOOL_INFO("Successfully compiled script \"%s\"!", args[1].data());
+						}
+					}
+					else
+					{
+						ZONETOOL_ERROR("Cannot find script \"%s\".", args[1].data());
+					}
+				});
+
+				// dump emitted opcodes
+				Memory(0x613FD0).jump(emit_opcode);
+
+				// force compiling gsc
+				Memory(0x427DB4).set<std::uint8_t>(0xEB);
+				Memory(0x427D22).set<std::uint8_t>(0xEB);
+				
+				// 
+				Memory(0x427DED).nop(6);
+				
+				// do nothing with online sessions
+				Memory(0x441650).set<std::uint8_t>(0xC3);
+
+				// temp fix for GSC compiling
+				Memory(0x434260).jump(gsc_compile_error);
+				
 				// Realloc asset pools
 				ReallocateAssetPoolM(localize, 2);
 				ReallocateAssetPoolM(material, 2);
@@ -429,131 +560,138 @@ char**>(0x00799278)[type]);
 				ReallocateAssetPoolM(rawfile, 2);
 				ReallocateAssetPoolM(lightdef, 2);
 
+				// Kill "missing asset" errors from the game to prevent confusion
+				Memory(0x5BB380).set<std::uint8_t>(0xC3);
+				
 				// Kill Com_Error
-				Memory(0x004B22D0).Jump(ExitZoneTool);
+				Memory(0x004B22D0).jump(ExitZoneTool);
 
 				// Tool init func
-				Memory(0x6BABA1).Call(Run);
-				Memory(0x4AA88B).Call(printf);
+				Memory(0x6BABA1).call(run);
+				Memory(0x4AA88B).call(printf);
 
 				// r_loadForRenderer
-				Memory(0x519DDF).Set<BYTE>(0x0);
+				Memory(0x519DDF).set<BYTE>(0x0);
 
 				// dirty disk breakpoint
 				// Memory(0x4CF7F0).Set<BYTE>(0xCC);
 
 				// delay loading of images, disable it
-				Memory(0x51F450).Set<BYTE>(0xC3);
+				Memory(0x51F450).set<BYTE>(0xC3);
 
 				// don't remove the 'texture data' pointer from GfxImage	
-				Memory(0x51F4FA).Nop(6);
+				Memory(0x51F4FA).nop(6);
 
 				// needed for the above to make Image_Release not misinterpret the texture data as a D3D texture
-				Memory(0x51F03D).Set<BYTE>(0xEB);
+				Memory(0x51F03D).set<BYTE>(0xEB);
 
 				// don't zero out pixel shaders
-				Memory(0x505AFB).Nop(7);
+				Memory(0x505AFB).nop(7);
 
 				// don't zero out vertex shaders
-				Memory(0x505BDB).Nop(7);
+				Memory(0x505BDB).nop(7);
 
 				// don't memset vertex declarations (not needed?)
-				Memory(0x00431B91).Nop(5);
+				Memory(0x00431B91).nop(5);
 
 				// allow loading of IWffu (unsigned) files
-				Memory(0x4158D9).Set<BYTE>(0xEB); //main function
-				Memory(0x4A1D97).Nop(2); //DB_AuthLoad_InflateInit
+				Memory(0x4158D9).set<BYTE>(0xEB); //main function
+				Memory(0x4A1D97).nop(2); //DB_AuthLoad_InflateInit
 
 				// basic checks (hash jumps, both normal and playlist)
-				Memory(0x5B97A3).Nop(2);
-				Memory(0x5BA493).Nop(2);
+				Memory(0x5B97A3).nop(2);
+				Memory(0x5BA493).nop(2);
 
-				Memory(0x5B991C).Nop(2);
-				Memory(0x5BA60C).Nop(2);
+				Memory(0x5B991C).nop(2);
+				Memory(0x5BA60C).nop(2);
 
-				Memory(0x5B97B4).Nop(2);
-				Memory(0x5BA4A4).Nop(2);
+				Memory(0x5B97B4).nop(2);
+				Memory(0x5BA4A4).nop(2);
 
 				// some other, unknown, check
-				Memory(0x5B9912).Set<BYTE>(0xB8);
-				Memory(0x5B9913).Set<DWORD>(1);
+				Memory(0x5B9912).set<BYTE>(0xB8);
+				Memory(0x5B9913).set<DWORD>(1);
 
-				Memory(0x5BA602).Set<BYTE>(0xB8);
-				Memory(0x5BA603).Set<DWORD>(1);
+				Memory(0x5BA602).set<BYTE>(0xB8);
+				Memory(0x5BA603).set<DWORD>(1);
 
 				// something related to image loading
-				Memory(0x54ADB0).Set<BYTE>(0xC3);
+				Memory(0x54ADB0).set<BYTE>(0xC3);
 
 				// dvar setting function, unknown stuff related to server thread sync
-				Memory(0x647781).Set<BYTE>(0xEB);
+				Memory(0x647781).set<BYTE>(0xEB);
 
 				// fs_basegame
-				Memory(0x6431D1).Set("zonetool");
+				Memory(0x6431D1).set("zonetool");
 
 				// hunk size (was 300 MiB)
-				Memory(0x64A029).Set<DWORD>(0x3F000000);
-				Memory(0x64A057).Set<DWORD>(0x3F000000); // 0x1C200000
+				Memory(0x64A029).set<DWORD>(0x3F000000);
+				Memory(0x64A057).set<DWORD>(0x3F000000); // 0x1C200000
 
 				// allow loading of IWffu (unsigned) files
-				Memory(0x4158D9).Set<BYTE>(0xEB); // main function
-				Memory(0x4A1D97).Nop(2); // DB_AuthLoad_InflateInit
+				Memory(0x4158D9).set<BYTE>(0xEB); // main function
+				Memory(0x4A1D97).nop(2); // DB_AuthLoad_InflateInit
 
 				// basic checks (hash jumps, both normal and playlist)
-				Memory(0x5B97A3).Nop(2);
-				Memory(0x5BA493).Nop(2);
+				Memory(0x5B97A3).nop(2);
+				Memory(0x5BA493).nop(2);
 
-				Memory(0x5B991C).Nop(2);
-				Memory(0x5BA60C).Nop(2);
+				Memory(0x5B991C).nop(2);
+				Memory(0x5BA60C).nop(2);
 
-				Memory(0x5B97B4).Nop(2);
-				Memory(0x5BA4A4).Nop(2);
+				Memory(0x5B97B4).nop(2);
+				Memory(0x5BA4A4).nop(2);
 
 				// Disabling loadedsound touching
-				Memory(0x492EFC).Nop(5);
+				Memory(0x492EFC).nop(5);
 
 				// weaponfile patches
-				Memory(0x408228).Nop(5); // find asset header
-				Memory(0x408230).Nop(5); // is asset default
-				Memory(0x40823A).Nop(2); // jump
+				Memory(0x408228).nop(5); // find asset header
+				Memory(0x408230).nop(5); // is asset default
+				Memory(0x40823A).nop(2); // jump
 
 				// menu stuff
 				// disable the 2 new tokens in ItemParse_rect
-				Memory(0x640693).Set<BYTE>(0xEB);
+				Memory(0x640693).set<BYTE>(0xEB);
 
 				// Dont load ASSET_TYPE_MENU anymore, we dont need it.
-				Memory(0x453406).Nop(5);
+				Memory(0x453406).nop(5);
 
 				// DB_AddXAsset hook
-				Memory(0x005BB650).Jump(DB_AddXAssetStub);
+				Memory(0x005BB650).jump(DB_AddXAssetStub);
 
 				// Fix fucking XSurface assets
-				Memory(0x0048E8A5).Call(Load_XSurfaceArray);
+				Memory(0x0048E8A5).call(Load_XSurfaceArray);
 
 				// Fastfile debugging
-				Memory(0x0044546D).Jump(IncreaseReadPointer);
-				Memory(0x00470E51).Jump(IncreaseReadPointer2);
-				Memory(0x004159E2).Call(ReadHeader);
+				Memory(0x0044546D).jump(IncreaseReadPointer);
+				Memory(0x00470E51).jump(IncreaseReadPointer2);
+				Memory(0x004159E2).call(ReadHeader);
+
+                // Load fastfiles from custom zone folders
+                Memory(0x44DA90).jump(GetZonePath);
 			}
 		}
-
-		std::shared_ptr<IZone> Linker::AllocZone(std::string& zone)
+		
+		std::shared_ptr<IZone> Linker::alloc_zone(const std::string& zone)
 		{
 			// Patch current thread
-			Memory(0x1CDE7FC).Set(GetCurrentThreadId());
+			Memory(0x1CDE7FC).set(GetCurrentThreadId());
 
 			// allocate zone
 			auto ptr = std::make_shared<Zone>(zone, this);
+			
 			return ptr;
 		}
 
-		std::shared_ptr<ZoneBuffer> Linker::AllocBuffer()
+		std::shared_ptr<ZoneBuffer> Linker::alloc_buffer()
 		{
 			auto ptr = std::make_shared<ZoneBuffer>();
 			ptr->init_streams(8);
 			return ptr;
 		}
 
-		void Linker::LoadZone(std::string& name)
+		void Linker::load_zone(const std::string& name)
 		{
 			ZONETOOL_INFO("Loading zone \"%s\"...", name.data());
 
@@ -563,16 +701,16 @@ char**>(0x00799278)[type]);
 			ZONETOOL_INFO("Zone \"%s\" loaded.", name.data());
 		}
 
-		void Linker::UnloadZones()
+		void Linker::unload_zones()
 		{
 		}
 
-		bool Linker::IsValidAssetType(std::string& type)
+		bool Linker::is_valid_asset_type(std::string& type)
 		{
-			return this->TypeToInt(type) >= 0;
+			return this->type_to_int(type) >= 0;
 		}
 
-		std::int32_t Linker::TypeToInt(std::string type)
+		std::int32_t Linker::type_to_int(std::string type)
 		{
 			auto xassettypes = reinterpret_cast<char**>(0x00799278);
 
@@ -585,18 +723,29 @@ char**>(0x00799278)[type]);
 			return -1;
 		}
 
-		std::string Linker::TypeToString(std::int32_t type)
+		std::string Linker::type_to_string(std::int32_t type)
 		{
 			auto xassettypes = reinterpret_cast<char**>(0x00799278);
 			return xassettypes[type];
 		}
 
-		void Linker::DumpZone(std::string& name)
+        bool Linker::supports_building()
+        {
+            return true;
+        }
+
+		bool Linker::supports_version(const zone_target_version version)
+		{
+			return version == zone_target_version::iw4_release || version == zone_target_version::iw4_release_console || 
+				version == zone_target_version::iw4_alpha_482 || version == zone_target_version::iw4_alpha_491;
+		}
+
+        void Linker::dump_zone(const std::string& name)
 		{
 			isDumpingComplete = false;
 			isDumping = true;
 			currentDumpingZone = name;
-			LoadZone(name);
+			load_zone(name);
 
 			while (!isDumpingComplete)
 			{
@@ -604,19 +753,11 @@ char**>(0x00799278)[type]);
 			}
 		}
 
-		void Linker::VerifyZone(std::string& name)
+		void Linker::verify_zone(const std::string& name)
 		{
 			isVerifying = true;
 			currentDumpingZone = name;
-			LoadZone(name);
-		}
-
-		Linker::Linker()
-		{
-		}
-
-		Linker::~Linker()
-		{
+			load_zone(name);
 		}
 	}
 }

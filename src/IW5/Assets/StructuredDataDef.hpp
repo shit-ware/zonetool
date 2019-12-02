@@ -47,8 +47,8 @@ namespace ZoneTool
 			int newIndexCount[ENUM_COUNT];
 			std::map<int, newEnumEntry*> newEntries[ENUM_COUNT];
 
-			std::string m_name;
-			StructuredDataDefSet* m_asset;
+			std::string name_;
+			StructuredDataDefSet* asset_;
 
 			void addEntry(enumType_s type, int statIndexOffset, char* entryName);
 
@@ -60,13 +60,13 @@ namespace ZoneTool
 			IStructuredDataDef();
 			~IStructuredDataDef();
 
-			void init(const std::string& name, std::shared_ptr<ZoneMemory>& mem) override;
-			void prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem) override;
+			void init(const std::string& name, ZoneMemory* mem) override;
+			void prepare(ZoneBuffer* buf, ZoneMemory* mem) override;
 			void load_depending(IZone* zone) override;
 
 			std::string name() override;
 			std::int32_t type() override;
-			void write(IZone* zone, std::shared_ptr<ZoneBuffer>& buffer) override;
+			void write(IZone* zone, ZoneBuffer* buffer) override;
 
 			static void dump(StructuredDataDefSet* asset);
 		};

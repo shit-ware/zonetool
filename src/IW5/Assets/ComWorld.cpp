@@ -45,7 +45,7 @@ namespace ZoneTool
 			PARSE_FLOAT(translationLimit);
 		}
 
-		ComWorld* IComWorld::parse(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		ComWorld* IComWorld::parse(const std::string& name, ZoneMemory* mem)
 		{
 			auto path = name + ".comworld";
 			if (FileSystem::FileExists(path))
@@ -87,37 +87,37 @@ namespace ZoneTool
 		{
 		}
 
-		void IComWorld::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void IComWorld::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = "maps/mp/" + currentzone + ".d3dbsp"; // name;
-			this->m_asset = this->parse(name, mem);
+			this->name_ = "maps/mp/" + currentzone + ".d3dbsp"; // name;
+			this->asset_ = this->parse(name, mem);
 
-			if (!this->m_asset)
+			if (!this->asset_)
 			{
-				this->m_asset = DB_FindXAssetHeader(this->type(), name.data(), 1).comworld;
+				this->asset_ = DB_FindXAssetHeader(this->type(), name.data(), 1).comworld;
 			}
 		}
 
-		void IComWorld::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IComWorld::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
 		void IComWorld::load_depending(IZone* zone)
 		{
-			auto asset = this->m_asset;
+			auto asset = this->asset_;
 
 			for (int i = 0; i < asset->primaryLightCount; i++)
 			{
 				if (asset->primaryLights[i].defName)
 				{
-					zone->AddAssetOfType(lightdef, asset->primaryLights[i].defName);
+					zone->add_asset_of_type(lightdef, asset->primaryLights[i].defName);
 				}
 			}
 		}
 
 		std::string IComWorld::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IComWorld::type()
@@ -125,9 +125,9 @@ namespace ZoneTool
 			return com_map;
 		}
 
-		void IComWorld::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void IComWorld::write(IZone* zone, ZoneBuffer* buf)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write(data);
 
 			buf->push_stream(3);

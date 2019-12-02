@@ -7,7 +7,7 @@
 // License: GNU GPL v3.0
 // ========================================================
 #include "stdafx.hpp"
-#include <zlib/zlib.h>
+#include <zlib.h>
 
 #define ZONETOOL_BRANDING		"Compiled using ZoneTool by RektInator, localhost & X3RX35."
 
@@ -15,7 +15,7 @@ namespace ZoneTool
 {
 	namespace IW5
 	{
-		RawFile* IRawFile::parse(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		RawFile* IRawFile::parse(const std::string& name, ZoneMemory* mem)
 		{
 			if (FileSystem::FileExists(name))
 			{
@@ -54,18 +54,18 @@ namespace ZoneTool
 			return nullptr;
 		}
 
-		void IRawFile::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void IRawFile::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = parse(name, mem);
+			this->name_ = name;
+			this->asset_ = parse(name, mem);
 
-			if (!this->m_asset)
+			if (!this->asset_)
 			{
-				this->m_asset = DB_FindXAssetHeader(this->type(), this->m_name.data(), 1).rawfile;
+				this->asset_ = DB_FindXAssetHeader(this->type(), this->name_.data(), 1).rawfile;
 			}
 		}
 
-		void IRawFile::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IRawFile::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
@@ -75,7 +75,7 @@ namespace ZoneTool
 
 		std::string IRawFile::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IRawFile::type()
@@ -83,9 +83,9 @@ namespace ZoneTool
 			return rawfile;
 		}
 
-		void IRawFile::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void IRawFile::write(IZone* zone, ZoneBuffer* buf)
 		{
-			const auto data = this->m_asset;
+			const auto data = this->asset_;
 			auto dest = buf->write<RawFile>(data);
 
 			buf->push_stream(3);

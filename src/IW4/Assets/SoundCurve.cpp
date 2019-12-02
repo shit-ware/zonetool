@@ -20,13 +20,13 @@ namespace ZoneTool
 		{
 		}
 
-		void ISoundCurve::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void ISoundCurve::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = DB_FindXAssetHeader(this->type(), this->name().data()).soundcurve;
+			this->name_ = name;
+			this->asset_ = DB_FindXAssetHeader(this->type(), this->name().data()).soundcurve;
 		}
 
-		void ISoundCurve::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void ISoundCurve::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
@@ -36,7 +36,7 @@ namespace ZoneTool
 
 		std::string ISoundCurve::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t ISoundCurve::type()
@@ -44,9 +44,9 @@ namespace ZoneTool
 			return sndcurve;
 		}
 
-		void ISoundCurve::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void ISoundCurve::write(IZone* zone, ZoneBuffer* buf)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write(data);
 
 			buf->push_stream(3);

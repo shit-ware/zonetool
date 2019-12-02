@@ -20,34 +20,34 @@ namespace ZoneTool
 		{
 		}
 
-		void IFontDef::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void IFontDef::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = DB_FindXAssetHeader(this->type(), this->name().data(), 1).font;
+			this->name_ = name;
+			this->asset_ = DB_FindXAssetHeader(this->type(), this->name().data(), 1).font;
 		}
 
-		void IFontDef::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IFontDef::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
 		void IFontDef::load_depending(IZone* zone)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 
 			if (data->material)
 			{
-				zone->AddAssetOfType(material, data->material->name);
+				zone->add_asset_of_type(material, data->material->name);
 			}
 
 			if (data->glowMaterial)
 			{
-				zone->AddAssetOfType(material, data->glowMaterial->name);
+				zone->add_asset_of_type(material, data->glowMaterial->name);
 			}
 		}
 
 		std::string IFontDef::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IFontDef::type()
@@ -55,9 +55,9 @@ namespace ZoneTool
 			return font;
 		}
 
-		void IFontDef::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void IFontDef::write(IZone* zone, ZoneBuffer* buf)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write(data);
 
 			Font_s;
@@ -71,14 +71,14 @@ namespace ZoneTool
 			if (data->material)
 			{
 				dest->material = reinterpret_cast<Material*>(
-					zone->GetAssetPointer(material, data->material->name)
+					zone->get_asset_pointer(material, data->material->name)
 				);
 			}
 
 			if (data->glowMaterial)
 			{
 				dest->glowMaterial = reinterpret_cast<Material*>(
-					zone->GetAssetPointer(material, data->glowMaterial->name)
+					zone->get_asset_pointer(material, data->glowMaterial->name)
 				);
 			}
 

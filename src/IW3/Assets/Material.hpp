@@ -15,8 +15,8 @@ namespace ZoneTool
 		class IMaterial
 		{
 		public:
-			static void dump(Material* asset);
-			static void dumpStateBits(Material* mat);
+			static void dump(Material* asset, ZoneMemory* mem);
+			static void dump_statebits(Material* mat);
 		};
 	}
 }

@@ -21,6 +21,8 @@ namespace ZoneTool
 	template <typename T>
 	static void encrypt_data(T* _data, std::size_t _size)
 	{
+		return;
+		
 		auto fastfile = FileSystem::GetFastFile();
 
 		auto encryptionKey = static_cast<std::string>(fastfile + ": This fastfile is property of the Plutonium Project."
@@ -329,7 +331,7 @@ namespace ZoneTool
 			*reinterpret_cast<std::uintptr_t*>(ptr) = -1;
 		}
 
-		void save(std::string& filename);
+		void save(const std::string& filename);
 
 		std::vector<std::uint8_t> compress_zstd();
 		std::vector<std::uint8_t> compress_zlib();

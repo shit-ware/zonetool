@@ -16,7 +16,7 @@ namespace ZoneTool
 		int freadint(FILE* file);
 
 		/*legacy zonetool code, refactor me!*/
-		MapEnts* IMapEnts::parse(std::string name, std::shared_ptr<ZoneMemory>& mem)
+		MapEnts* IMapEnts::parse(std::string name, ZoneMemory* mem)
 		{
 			// check if we can open a filepointer
 			if (!FileSystem::FileExists(name + ".ents"))
@@ -50,43 +50,19 @@ namespace ZoneTool
 			}*/
 
 			AssetReader triggerReader(mem);
-			if (triggerReader.Open(name + ".ents.triggers"))
+			if (triggerReader.open(name + ".ents.triggers"))
 			{
-				ents->trigger.modelCount = triggerReader.Int();
-				ents->trigger.models = triggerReader.Array<TriggerModel>();
+				ents->trigger.modelCount = triggerReader.read_int();
+				ents->trigger.models = triggerReader.read_array<TriggerModel>();
 
-				ents->trigger.hullCount = triggerReader.Int();
-				ents->trigger.hulls = triggerReader.Array<TriggerHull>();
+				ents->trigger.hullCount = triggerReader.read_int();
+				ents->trigger.hulls = triggerReader.read_array<TriggerHull>();
 
-				ents->trigger.slabCount = triggerReader.Int();
-				ents->trigger.slabs = triggerReader.Array<TriggerSlab>();
+				ents->trigger.slabCount = triggerReader.read_int();
+				ents->trigger.slabs = triggerReader.read_array<TriggerSlab>();
 
-				triggerReader.Close();
+				triggerReader.close();
 			}
-
-			//file = FileSystem::FileOpen(name + ".ents.triggers", "rb");
-
-			//ents->trigger.hullCount = freadint(file);
-			//ents->trigger.modelCount = freadint(file);
-			//ents->trigger.slabCount = freadint(file);
-
-			//// parse trigger data
-			//if (ents->trigger.hullCount)
-			//{
-			//	ents->trigger.hulls = mem->Alloc<TriggerHull>(ents->trigger.hullCount);
-			//	fread(ents->trigger.hulls, sizeof(TriggerHull), ents->trigger.hullCount, file);
-			//}
-			//if (ents->trigger.modelCount)
-			//{
-			//	ents->trigger.models = mem->Alloc<TriggerModel>(ents->trigger.modelCount);
-			//	fread(ents->trigger.models, sizeof(TriggerModel), ents->trigger.modelCount, file);
-			//}
-			//if (ents->trigger.slabCount)
-			//{
-			//	ents->trigger.slabs = mem->Alloc<TriggerSlab>(ents->trigger.slabCount);
-			//	fread(ents->trigger.slabs, sizeof(TriggerSlab), ents->trigger.slabCount, file);
-			//}
-			//FileSystem::FileClose(file);
 
 			// return mapents
 			return ents;
@@ -100,24 +76,24 @@ namespace ZoneTool
 		{
 		}
 
-		void IMapEnts::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void IMapEnts::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = "maps/mp/" + currentzone + ".d3dbsp"; // name;
-			this->m_asset = this->parse(name, mem);
+			this->name_ = "maps/mp/" + currentzone + ".d3dbsp"; // name;
+			this->asset_ = this->parse(name, mem);
 
-			if (!this->m_asset)
+			if (!this->asset_)
 			{
-				this->m_asset = DB_FindXAssetHeader(this->type(), name.data(), 1).mapents;
+				this->asset_ = DB_FindXAssetHeader(this->type(), name.data(), 1).mapents;
 			}
 		}
 
-		void IMapEnts::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IMapEnts::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
 		void IMapEnts::load_depending(IZone* zone)
 		{
-			load_depending_internal(zone, this->m_asset->entityString);
+			load_depending_internal(zone, this->asset_->entityString);
 		}
 
 		void IMapEnts::load_depending_internal(IZone* zone, const char* entityString)
@@ -185,7 +161,7 @@ namespace ZoneTool
 
 		std::string IMapEnts::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IMapEnts::type()
@@ -193,7 +169,7 @@ namespace ZoneTool
 			return map_ents;
 		}
 
-		void IMapEnts::write_triggers(IZone* zone, std::shared_ptr<ZoneBuffer>& buf, MapTriggers* dest)
+		void IMapEnts::write_triggers(IZone* zone, ZoneBuffer* buf, MapTriggers* dest)
 		{
 			if (dest->models)
 			{
@@ -218,9 +194,9 @@ namespace ZoneTool
 			}
 		}
 
-		void IMapEnts::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void IMapEnts::write(IZone* zone, ZoneBuffer* buf)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write(data);
 
 			buf->push_stream(3);
@@ -299,18 +275,18 @@ namespace ZoneTool
 				}
 
 				AssetDumper triggerDumper;
-				if (triggerDumper.Open(asset->name + ".ents.triggers"s))
+				if (triggerDumper.open(asset->name + ".ents.triggers"s))
 				{
-					triggerDumper.Int(asset->trigger.modelCount);
-					triggerDumper.Array<TriggerModel>(asset->trigger.models, asset->trigger.modelCount);
+					triggerDumper.dump_int(asset->trigger.modelCount);
+					triggerDumper.dump_array<TriggerModel>(asset->trigger.models, asset->trigger.modelCount);
 
-					triggerDumper.Int(asset->trigger.hullCount);
-					triggerDumper.Array<TriggerHull>(asset->trigger.hulls, asset->trigger.hullCount);
+					triggerDumper.dump_int(asset->trigger.hullCount);
+					triggerDumper.dump_array<TriggerHull>(asset->trigger.hulls, asset->trigger.hullCount);
 
-					triggerDumper.Int(asset->trigger.slabCount);
-					triggerDumper.Array<TriggerSlab>(asset->trigger.slabs, asset->trigger.slabCount);
+					triggerDumper.dump_int(asset->trigger.slabCount);
+					triggerDumper.dump_array<TriggerSlab>(asset->trigger.slabs, asset->trigger.slabCount);
 
-					triggerDumper.Close();
+					triggerDumper.close();
 				}
 			}
 		}

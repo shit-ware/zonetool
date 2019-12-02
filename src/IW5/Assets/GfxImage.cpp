@@ -37,7 +37,7 @@ namespace ZoneTool
 			return newName;
 		}
 
-		GfxImage* IGfxImage::parse(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		GfxImage* IGfxImage::parse(const std::string& name, ZoneMemory* mem)
 		{
 			auto path = "images\\" + this->clean_name(name) + ".ffimg";
 
@@ -102,42 +102,42 @@ namespace ZoneTool
 			return img;
 		}
 
-		void IGfxImage::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void IGfxImage::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = this->parse(name, mem);
-			this->isMapImage = (this->m_name.size() >= 6)
-				                   ? ((this->m_name.substr(0, 6) == "*light" || this->m_name.substr(0, 6) == "*refle" ||
-					                      this->m_name == "$outdoor")
+			this->name_ = name;
+			this->asset_ = this->parse(name, mem);
+			this->isMapImage = (this->name_.size() >= 6)
+				                   ? ((this->name_.substr(0, 6) == "*light" || this->name_.substr(0, 6) == "*refle" ||
+					                      this->name_ == "$outdoor")
 					                      ? true
 					                      : false)
 				                   : false;
 
-			if (!this->m_asset)
+			if (!this->asset_)
 			{
-				this->m_asset = DB_FindXAssetHeader(this->type(), this->m_name.data(), 1).gfximage;
+				this->asset_ = DB_FindXAssetHeader(this->type(), this->name_.data(), 1).gfximage;
 			}
 		}
 
-		void IGfxImage::init(void* asset, std::shared_ptr<ZoneMemory>& mem)
+		void IGfxImage::init(void* asset, ZoneMemory* mem)
 		{
-			this->m_asset = reinterpret_cast<GfxImage*>(asset);
-			this->m_name = this->m_asset->name;
-			this->isMapImage = (this->m_name.size() >= 6)
-				                   ? ((this->m_name.substr(0, 6) == "*light" || this->m_name.substr(0, 6) == "*refle" ||
-					                      this->m_name == "$outdoor")
+			this->asset_ = reinterpret_cast<GfxImage*>(asset);
+			this->name_ = this->asset_->name;
+			this->isMapImage = (this->name_.size() >= 6)
+				                   ? ((this->name_.substr(0, 6) == "*light" || this->name_.substr(0, 6) == "*refle" ||
+					                      this->name_ == "$outdoor")
 					                      ? true
 					                      : false)
 				                   : false;
 
-			auto parsed = this->parse(this->m_name, mem);
+			auto parsed = this->parse(this->name_, mem);
 			if (parsed)
 			{
-				this->m_asset = parsed;
+				this->asset_ = parsed;
 			}
 		}
 
-		void IGfxImage::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IGfxImage::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
@@ -147,7 +147,7 @@ namespace ZoneTool
 
 		std::string IGfxImage::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IGfxImage::type()
@@ -155,21 +155,132 @@ namespace ZoneTool
 			return image;
 		}
 
-		void IGfxImage::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		struct IW3_GfxImageFileHeader
 		{
-			if (FileSystem::FileExists(this->name() + ".iwi") && !std::filesystem::exists(
-				"main\\iw5_images\\" + this->name() + ".iwi"))
+			char tag[3];
+			char version;
+			char format;
+			std::uint8_t flags;
+			__int16 dimensions[3];
+			int fileSizeForPicmip[4];
+		};
+
+		enum class iw3_file_image_flags_t : std::uint8_t
+		{
+			IMG_FLAG_NOPICMIP = 0x1,
+			IMG_FLAG_NOMIPMAPS = 0x2,
+			IMG_FLAG_CUBEMAP = 0x4,
+			IMG_FLAG_VOLMAP = 0x8,
+			IMG_FLAG_STREAMING = 0x10,
+			IMG_FLAG_LEGACY_NORMALS = 0x20,
+			IMG_FLAG_CLAMP_U = 0x40,
+			IMG_FLAG_CLAMP_V = 0x80,
+		};
+		enum class file_image_flags_t : std::uint32_t
+		{
+			IMG_FLAG_NOPICMIP = 0x1,
+			IMG_FLAG_NOMIPMAPS = 0x2,
+			IMG_FLAG_STREAMING = 0x4,
+			IMG_FLAG_LEGACY_NORMALS = 0x8,
+			IMG_FLAG_CLAMP_U = 0x10,
+			IMG_FLAG_CLAMP_V = 0x20,
+			IMG_FLAG_ALPHA_WEIGHTED_COLORS = 0x40,
+			IMG_FLAG_DXTC_APPROX_WEIGHTS = 0x80,
+			IMG_FLAG_GAMMA_NONE = 0x0,
+			IMG_FLAG_GAMMA_SRGB = 0x100,
+			IMG_FLAG_GAMMA_PWL = 0x200,
+			IMG_FLAG_GAMMA_2 = 0x300,
+			IMG_FLAG_MAPTYPE_2D = 0x0,
+			IMG_FLAG_MAPTYPE_CUBE = 0x10000,
+			IMG_FLAG_MAPTYPE_3D = 0x20000,
+			IMG_FLAG_MAPTYPE_1D = 0x30000,
+			IMG_FLAG_NORMALMAP = 0x40000,
+			IMG_FLAG_INTENSITY_TO_ALPHA = 0x80000,
+			IMG_FLAG_DYNAMIC = 0x1000000,
+			IMG_FLAG_RENDER_TARGET = 0x2000000,
+			IMG_FLAG_SYSTEMMEM = 0x4000000,
+		};
+		
+		void translate_flags(IW3_GfxImageFileHeader* iw3_header, GfxImageFileHeader* iw5_header, iw3_file_image_flags_t iw3_flag, file_image_flags_t iw5_flag)
+		{
+			if ((iw3_header->flags & static_cast<std::uint8_t>(iw3_flag)) == static_cast<std::uint8_t>(iw3_flag))
+			{
+				iw5_header->flags |= static_cast<std::uint32_t>(iw5_flag);
+			}
+		}
+		
+		void IGfxImage::dump_iwi(const std::string& name)
+		{
+			if (FileSystem::FileExists(name + ".iwi") && !std::filesystem::exists(
+				"main\\iw4_images\\" + name + ".iwi"))
 			{
 				auto fp = fopen(
-					va("main\\%s\\images\\%s.iwi", FileSystem::GetFastFile().data(), this->name().data()).data(), "wb");
+					va("main\\%s\\images\\%s.iwi", FileSystem::GetFastFile().data(), name.data()).data(), "wb");
+
 				if (fp)
 				{
-					auto origfp = FileSystem::FileOpen(this->name() + ".iwi", "rb");
+					auto origfp = FileSystem::FileOpen(name + ".iwi", "rb");
 
 					if (origfp)
 					{
 						auto origsize = FileSystem::FileSize(origfp);
 						auto bytes = FileSystem::ReadBytes(origfp, origsize);
+
+						if (bytes.size() > 3)
+						{
+							const auto version = bytes[3];
+
+							if (version != 8 && version != 9)
+							{
+								if (version == 6)
+								{
+									constexpr auto iw5_header_size = sizeof(GfxImageFileHeader);
+									constexpr auto iw3_header_size = sizeof(IW3_GfxImageFileHeader);
+									
+									ZONETOOL_INFO("Converting IWI %s from version %u to version %u...", name.data(), version, 8);
+
+									// parse iw3 header
+									IW3_GfxImageFileHeader iw3_header;
+									memcpy(&iw3_header, bytes.data(), iw3_header_size);
+
+									// generate iw5 header
+									GfxImageFileHeader header = {};
+									memset(&header, 0, sizeof GfxImageFileHeader);
+									
+									memcpy(header.tag, iw3_header.tag, 3);
+									header.version = 8;
+									header.format = iw3_header.format;
+									header.unused = false;
+									memcpy(header.dimensions, iw3_header.dimensions, sizeof(__int16[3]));
+									memcpy(header.fileSizeForPicmip, iw3_header.fileSizeForPicmip, sizeof(int[4]));
+
+									// transform iwi flags
+									translate_flags(&iw3_header, &header, iw3_file_image_flags_t::IMG_FLAG_NOPICMIP, file_image_flags_t::IMG_FLAG_NOPICMIP);
+									translate_flags(&iw3_header, &header, iw3_file_image_flags_t::IMG_FLAG_NOMIPMAPS, file_image_flags_t::IMG_FLAG_NOMIPMAPS);
+									translate_flags(&iw3_header, &header, iw3_file_image_flags_t::IMG_FLAG_CUBEMAP, file_image_flags_t::IMG_FLAG_MAPTYPE_CUBE);
+									translate_flags(&iw3_header, &header, iw3_file_image_flags_t::IMG_FLAG_VOLMAP, file_image_flags_t::IMG_FLAG_MAPTYPE_3D);
+									translate_flags(&iw3_header, &header, iw3_file_image_flags_t::IMG_FLAG_STREAMING, file_image_flags_t::IMG_FLAG_STREAMING);
+									translate_flags(&iw3_header, &header, iw3_file_image_flags_t::IMG_FLAG_LEGACY_NORMALS, file_image_flags_t::IMG_FLAG_LEGACY_NORMALS);
+									translate_flags(&iw3_header, &header, iw3_file_image_flags_t::IMG_FLAG_CLAMP_U, file_image_flags_t::IMG_FLAG_CLAMP_U);
+									translate_flags(&iw3_header, &header, iw3_file_image_flags_t::IMG_FLAG_CLAMP_V, file_image_flags_t::IMG_FLAG_CLAMP_V);
+									
+									// write iw5 header
+									fwrite(&header, iw5_header_size, 1, fp);
+									
+									// write iw3 image buffer
+									fwrite(&bytes[iw3_header_size], bytes.size() - iw3_header_size, 1, fp);
+									fclose(fp);
+								}
+								else
+								{
+									ZONETOOL_FATAL("IWI of version %u is not supported for conversion. IWI file was %s.", version, name.data());
+								}
+
+								return;
+							}
+						}
+
+						// write original data
 						fwrite(&bytes[0], bytes.size(), 1, fp);
 						fclose(origfp);
 					}
@@ -177,12 +288,13 @@ namespace ZoneTool
 					fclose(fp);
 				}
 			}
-			else
-			{
-				ZONETOOL_ERROR("Image \"%s\" not found!", this->name().data());
-			}
+		}
+		
+		void IGfxImage::write(IZone* zone, ZoneBuffer* buf)
+		{
+			dump_iwi(this->name());
 
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write(data);
 
 			buf->push_stream(3);

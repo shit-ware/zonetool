@@ -110,12 +110,12 @@ namespace ZoneTool
 			return hash;
 		}
 
-		StringTable* StringTable_Parse(std::string name, std::shared_ptr<ZoneMemory>& mem)
+		StringTable* StringTable_Parse(std::string name, ZoneMemory* mem)
 		{
 			auto table = std::make_unique<CSV>(name);
 			auto stringtable = mem->Alloc<StringTable>();
 
-			stringtable->name = _strdup(name.c_str());
+			stringtable->name = mem->StrDup(name.c_str());
 			stringtable->rows = table->rows();
 			stringtable->columns = table->max_columns();
 			stringtable->strings = mem->Alloc<StringTableCell>(stringtable->rows * stringtable->columns);
@@ -125,7 +125,7 @@ namespace ZoneTool
 				for (int col = 0; col < table->columns(row); col++)
 				{
 					int entry = (row * stringtable->columns) + col;
-					stringtable->strings[entry].string = strdup(table->entry(row, col).c_str());
+					stringtable->strings[entry].string = mem->StrDup(table->entry(row, col).c_str());
 					stringtable->strings[entry].hash = StringTable_Hash(stringtable->strings[entry].string);
 				}
 			}
@@ -141,19 +141,19 @@ namespace ZoneTool
 		{
 		}
 
-		void IStringTable::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
+		void IStringTable::init(const std::string& name, ZoneMemory* mem)
 		{
-			this->m_name = name;
-			this->m_asset = DB_FindXAssetHeader(this->type(), this->name().data(), 1).stringtable;
+			this->name_ = name;
+			this->asset_ = DB_FindXAssetHeader(this->type(), this->name().data(), 1).stringtable;
 
 			if (FileSystem::FileExists(name))
 			{
 				ZONETOOL_INFO("Parsing stringtable %s...", name.data());
-				this->m_asset = StringTable_Parse(name, mem);
+				this->asset_ = StringTable_Parse(name, mem);
 			}
 		}
 
-		void IStringTable::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IStringTable::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 		}
 
@@ -163,7 +163,7 @@ namespace ZoneTool
 
 		std::string IStringTable::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IStringTable::type()
@@ -171,12 +171,10 @@ namespace ZoneTool
 			return stringtable;
 		}
 
-		void IStringTable::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void IStringTable::write(IZone* zone, ZoneBuffer* buf)
 		{
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write(data);
-
-			sizeof StringTable;
 
 			buf->push_stream(3);
 			START_LOG_STREAM;
@@ -186,13 +184,16 @@ namespace ZoneTool
 			if (data->strings)
 			{
 				buf->align(3);
-				auto destStrings = buf->write(data->strings, data->columns * data->rows);
+				const auto destStrings = buf->write(data->strings, data->columns * data->rows);
 
 				if (data->columns * data->rows > 0)
 				{
 					for (int i = 0; i < data->columns * data->rows; i++)
 					{
-						destStrings[i].string = buf->write_str(data->strings[i].string);
+						if (data->strings[i].string)
+						{
+							destStrings[i].string = buf->write_str(data->strings[i].string);
+						}
 					}
 				}
 

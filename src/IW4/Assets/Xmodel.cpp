@@ -7,206 +7,51 @@
 // License: GNU GPL v3.0
 // ========================================================
 #include "stdafx.hpp"
+#include "IW5/Assets/XModel.hpp"
 
 namespace ZoneTool
 {
 	namespace IW4
 	{
-		XModel* IXModel::parse_new(const std::string& name, std::shared_ptr<ZoneMemory>& mem,
-		                           const std::string& filename)
+		XModel* IXModel::parse(std::string name, ZoneMemory* mem)
 		{
-			auto asset = mem->Alloc<XModel>();
-
-			AssetReader read(mem);
-
-			if (!read.Open(filename))
-			{
-				return nullptr;
-			}
-
-#ifdef USE_VMPROTECT
-			VMProtectBeginUltra("IW4::IXModel::parse_new");
-#endif
-
-			ZONETOOL_INFO("Parsing xmodel \"%s\"...", name.c_str());
-
-			asset->name = read.String();
-			asset->scale = read.Float();
-			asset->radius = read.Float();
-
-			auto bounds = read.Array<Bounds>();
-			memcpy(&asset->bounds, bounds, sizeof Bounds);
-
-			asset->contents = read.Int();
-			asset->flags = read.Int();
-			asset->contents = read.Int();
-
-			for (int i = 0; i < 6; i++)
-			{
-				asset->noScalePartBits[i] = read.Int();
-			}
-
-			// tags
-			asset->numBones = read.Int();
-			asset->numRootBones = read.Int();
-			asset->boneNames = read.Array<short>();
-			for (int i = 0; i < asset->numBones; i++)
-			{
-				asset->boneNames[i] = SL_AllocString(read.String());
-			}
-			asset->parentList = read.Array<unsigned char>();
-			asset->tagAngles = read.Array<XModelAngle>();
-			asset->tagPositions = read.Array<XModelTagPos>();
-			asset->partClassification = read.Array<char>();
-			asset->animMatrix = read.Array<DObjAnimMat>();
-			asset->boneInfo = read.Array<XBoneInfo>();
-
-			// surfaces
-			asset->numSurfaces = read.Int();
-			asset->materials = read.Array<Material*>();
-			for (int i = 0; i < asset->numSurfaces; i++)
-			{
-				asset->materials[i] = read.Asset<Material>();
-			}
-
-			// lods
-			asset->numLods = read.Int();
-			asset->maxLoadedLod = read.Int();
-			asset->lodRampType = read.Int();
-			auto lods = read.Array<XSurfaceLod>();
-			memcpy(asset->lods, lods, sizeof XSurfaceLod * 4);
-			for (int i = 0; i < asset->numLods; i++)
-			{
-				asset->lods[i].surfaces = read.Asset<ModelSurface>();
-
-				//if (asset->lods[i].surfaces && strlen(asset->lods[i].surfaces->name))
-				//{
-				//	auto xsurf = new IXSurface;
-				//	xsurf->init(static_cast<std::string>(asset->lods[i].surfaces->name), mem);
-
-				//	dependingSurfaces[i] = xsurf;
-				//}
-				//else
-				//{
-				//	dependingSurfaces[i] = nullptr;
-				//	asset->lods[i].surfaces = nullptr;
-				//}
-			}
-
-			// colSurfs
-			asset->numColSurfs = read.Int();
-			asset->colSurf = read.Array<XModelCollSurf_s>();
-			for (int i = 0; i < asset->numColSurfs; i++)
-			{
-				asset->colSurf[i].tris = read.Array<XModelCollTri_s>();
-			}
-
-			// subassets
-			asset->physPreset = read.Asset<PhysPreset>();
-			asset->physCollmap = read.Asset<PhysCollmap>();
-
-#ifdef USE_VMPROTECT
-			VMProtectEnd();
-#endif
-
-			read.Close();
-
-			return asset;
+			return reinterpret_cast<XModel*>(IW5::IXModel::parse(name, mem, SL_AllocString));
 		}
 
-		XModel* IXModel::parse(std::string name, std::shared_ptr<ZoneMemory>& mem)
+		void IXModel::init(const std::string& name, ZoneMemory* mem)
 		{
-			auto path = ""s;
+			this->name_ = name;
+			this->asset_ = this->parse(name, mem);
 
-			path = "XModel\\" + name + ".xme5";
-			isXME5OrNewer = false;
-			/*auto xme5asset = */ // return this->parse_new(name, mem, path);
-
-			/*if (xme5asset)
+			if (!this->asset_)
 			{
-				this->isXME5OrNewer = true;
-				return xme5asset;
-			}*/
-
-			// old code
-			int version = 2;
-
-			path = "XModel\\" + name + ".xme2";
-			auto file = FileSystem::FileOpen(path, "rb"s);
-
-			if (!file)
-			{
-				path = "XModel\\" + name + ".xme3";
-				file = FileSystem::FileOpen(path, "rb"s);
-
-				if (!file)
-				{
-					path = "XModel\\" + name + ".xme4";
-					file = FileSystem::FileOpen(path, "rb"s);
-
-					if (!file)
-					{
-						path = "XModel\\" + name + ".xme5";
-						file = FileSystem::FileOpen(path, "rb"s);
-
-						if (!file)
-						{
-							return nullptr;
-						}
-						isXME5OrNewer = true;
-
-						FileSystem::FileClose(file);
-						return this->parse_new(name, mem, path);
-					}
-					version = 4;
-				}
-				else
-				{
-					version = 3;
-				}
-			}
-
-			FileSystem::FileClose(file);
-			return nullptr;
-		}
-
-		void IXModel::init(const std::string& name, std::shared_ptr<ZoneMemory>& mem)
-		{
-			memset(this->dependingSurfaces, 0, sizeof this->dependingSurfaces);
-
-			this->isXME5OrNewer = false;
-			this->m_name = name;
-			this->m_asset = this->parse(name, mem);
-
-			if (!this->m_asset)
-			{
-				this->m_asset = DB_FindXAssetHeader(this->type(), this->m_name.data()).xmodel;
+				this->asset_ = DB_FindXAssetHeader(this->type(), this->name_.data()).xmodel;
 			}
 		}
 
-		void IXModel::prepare(std::shared_ptr<ZoneBuffer>& buf, std::shared_ptr<ZoneMemory>& mem)
+		void IXModel::prepare(ZoneBuffer* buf, ZoneMemory* mem)
 		{
 			// fixup scriptstrings
 			auto xmodel = mem->Alloc<XModel>();
-			memcpy(xmodel, this->m_asset, sizeof XModel);
+			memcpy(xmodel, this->asset_, sizeof XModel);
 
 			// allocate bonenames
-			if (this->m_asset->boneNames)
+			if (this->asset_->boneNames)
 			{
 				xmodel->boneNames = mem->Alloc<short>(xmodel->numBones);
-				memcpy(xmodel->boneNames, this->m_asset->boneNames, sizeof(short) * xmodel->numBones);
+				memcpy(xmodel->boneNames, this->asset_->boneNames, sizeof(short) * xmodel->numBones);
 
 				for (int i = 0; i < xmodel->numBones; i++)
 				{
 					if (xmodel->boneNames[i])
 					{
-						std::string bone = SL_ConvertToString(this->m_asset->boneNames[i]);
+						std::string bone = SL_ConvertToString(this->asset_->boneNames[i]);
 						xmodel->boneNames[i] = buf->write_scriptstring(bone);
 					}
 				}
 			}
 
-			this->m_asset = xmodel;
+			this->asset_ = xmodel;
 		}
 
 		void IXModel::load_depending(IZone* zone)
@@ -215,14 +60,14 @@ namespace ZoneTool
 			VMProtectBeginUltra("IW4::IXModel::load_depending");
 #endif
 
-			auto data = this->m_asset;
+			auto data = this->asset_;
 
 			// Materials
 			for (std::int32_t i = 0; i < data->numSurfaces; i++)
 			{
 				if (data->materials[i])
 				{
-					zone->AddAssetOfType(material, data->materials[i]->name);
+					zone->add_asset_of_type(material, data->materials[i]->name);
 				}
 			}
 
@@ -231,33 +76,20 @@ namespace ZoneTool
 			{
 				if (data->lods[i].surfaces)
 				{
-					// Add the pointer rather than re-finding it by name, because it might have been parsed.
-					if (isXME5OrNewer)
-					{
-						zone->AddAssetOfType(xmodelsurfs, data->lods[i].surfaces->name);
-					}
-					else
-					{
-						zone->AddAssetOfTypePtr(xmodelsurfs, data->lods[i].surfaces);
-					}
+					zone->add_asset_of_type(xmodelsurfs, data->lods[i].surfaces->name);
 				}
-
-				//if (data->lods[i].surfaces && dependingSurfaces[i] != nullptr)
-				//{
-				//	dependingSurfaces[i]->load_depending(zone);
-				//}
 			}
 
 			// PhysCollmap
 			if (data->physCollmap)
 			{
-				zone->AddAssetOfType(phys_collmap, data->physCollmap->name);
+				zone->add_asset_of_type(phys_collmap, data->physCollmap->name);
 			}
 
 			// PhysPreset
 			if (data->physPreset)
 			{
-				zone->AddAssetOfType(physpreset, data->physPreset->name);
+				zone->add_asset_of_type(physpreset, data->physPreset->name);
 			}
 
 #ifdef USE_VMPROTECT
@@ -267,7 +99,7 @@ namespace ZoneTool
 
 		std::string IXModel::name()
 		{
-			return this->m_name;
+			return this->name_;
 		}
 
 		std::int32_t IXModel::type()
@@ -275,13 +107,13 @@ namespace ZoneTool
 			return xmodel;
 		}
 
-		void IXModel::write(IZone* zone, std::shared_ptr<ZoneBuffer>& buf)
+		void IXModel::write(IZone* zone, ZoneBuffer* buf)
 		{
 #ifdef USE_VMPROTECT
 			VMProtectBeginUltra("IW4::IXModel::write");
 #endif
 
-			auto data = this->m_asset;
+			auto data = this->asset_;
 			auto dest = buf->write<XModel>(data);
 
 			assert(sizeof XModel, 304);
@@ -340,7 +172,7 @@ namespace ZoneTool
 				auto destMaterials = buf->write(data->materials, data->numSurfaces);
 				for (int i = 0; i < data->numSurfaces; i++)
 				{
-					destMaterials[i] = reinterpret_cast<Material*>(zone->GetAssetPointer(
+					destMaterials[i] = reinterpret_cast<Material*>(zone->get_asset_pointer(
 						material, data->materials[i]->name));
 				}
 
@@ -350,7 +182,7 @@ namespace ZoneTool
 			for (int i = 0; i < 4; i++)
 			{
 				if (!data->lods[i].surfaces) continue;
-				dest->lods[i].surfaces = reinterpret_cast<ModelSurface*>(zone->GetAssetPointer(
+				dest->lods[i].surfaces = reinterpret_cast<XModelSurfs*>(zone->get_asset_pointer(
 					xmodelsurfs, data->lods[i].surfaces->name));
 
 				//if (data->lods[i].surfaces && dependingSurfaces[i])
@@ -394,96 +226,18 @@ namespace ZoneTool
 
 			if (data->physCollmap)
 			{
-				dest->physCollmap = reinterpret_cast<PhysCollmap*>(zone->GetAssetPointer(
+				dest->physCollmap = reinterpret_cast<PhysCollmap*>(zone->get_asset_pointer(
 					phys_collmap, data->physCollmap->name));
 			}
 
 			if (data->physPreset)
 			{
-				dest->physPreset = reinterpret_cast<PhysPreset*>(zone->GetAssetPointer(
+				dest->physPreset = reinterpret_cast<PhysPreset*>(zone->get_asset_pointer(
 					physpreset, data->physPreset->name));
 			}
 
 			END_LOG_STREAM;
 			buf->pop_stream();
-
-#ifdef USE_VMPROTECT
-			VMProtectEnd();
-#endif
-		}
-
-		void IXModel::dump_internal(XModel* asset, const std::function<const char*(uint16_t)>& convertToString)
-		{
-#ifdef USE_VMPROTECT
-			VMProtectBeginUltra("IW4::IXModel::dump");
-#endif
-
-			AssetDumper dump;
-			dump.Open("XModel\\"s + asset->name + ".xme5");
-
-			// name
-			dump.String(asset->name);
-
-			// generic data
-			dump.Float(asset->scale);
-			dump.Float(asset->radius);
-			dump.Array(&asset->bounds, 1);
-			dump.Int(asset->contents);
-			dump.Int(asset->flags);
-			dump.Int(asset->contents);
-
-			// partbits
-			for (int i = 0; i < 6; i++)
-			{
-				dump.Int(asset->noScalePartBits[i]);
-			}
-
-			// tags
-			dump.Int(asset->numBones);
-			dump.Int(asset->numRootBones);
-			dump.Array(asset->boneNames, asset->numBones);
-			for (int i = 0; i < asset->numBones; i++)
-			{
-				dump.String(convertToString(asset->boneNames[i]));
-			}
-			dump.Array(asset->parentList, asset->numBones - asset->numRootBones);
-			dump.Array(asset->tagAngles, asset->numBones - asset->numRootBones);
-			dump.Array(asset->tagPositions, asset->numBones - asset->numRootBones);
-			dump.Array(asset->partClassification, asset->numBones);
-			dump.Array(asset->animMatrix, asset->numBones);
-			dump.Array(asset->boneInfo, asset->numBones);
-
-			// surfaces
-			dump.Int(asset->numSurfaces);
-			dump.Array(asset->materials, asset->numSurfaces);
-			for (int i = 0; i < asset->numSurfaces; i++)
-			{
-				dump.Asset(asset->materials[i]);
-			}
-
-			// lods
-			dump.Int(asset->numLods);
-			dump.Int(asset->maxLoadedLod);
-			dump.Int(asset->lodRampType);
-			dump.Array(asset->lods, 4);
-			for (int i = 0; i < asset->numLods; i++)
-			{
-				dump.Asset(asset->lods[i].surfaces);
-			}
-
-			// colSurfs
-			dump.Int(asset->numColSurfs);
-			dump.Array(asset->colSurf, asset->numColSurfs);
-			for (int i = 0; i < asset->numColSurfs; i++)
-			{
-				dump.Array(asset->colSurf[i].tris, asset->colSurf[i].numCollTris);
-			}
-
-			// subassets
-			dump.Asset(asset->physPreset);
-			dump.Asset(asset->physCollmap);
-
-			dump.Close();
 
 #ifdef USE_VMPROTECT
 			VMProtectEnd();
@@ -553,7 +307,7 @@ namespace ZoneTool
 							{
 								// add surface to vector
 								new_surfaces.emplace_back(
-									lod, model->lods[lod].surfaces->xSurficies[i - model->lods[lod].surfIndex]);
+									lod, model->lods[lod].surfaces->surfs[i - model->lods[lod].surfIndex]);
 							}
 						}
 					}
@@ -593,14 +347,14 @@ namespace ZoneTool
 				model->lods[lod].surfIndex = surface_start_index;
 
 				// alloc new XModelSurfs asset
-				const auto new_model_surface = new ModelSurface;
-				memcpy(new_model_surface, model->lods[lod].surfaces, sizeof ModelSurface);
+				const auto new_model_surface = new XModelSurfs;
+				memcpy(new_model_surface, model->lods[lod].surfaces, sizeof XModelSurfs);
 
 				new_model_surface->name = _strdup(va("%s_no_attach", new_model_surface->name).data());
-				new_model_surface->xSurficiesCount = model_surfaces_for_lod.size();
+				new_model_surface->numsurfs = model_surfaces_for_lod.size();
 
-				new_model_surface->xSurficies = new XSurface[model_surfaces_for_lod.size()];
-				memcpy(new_model_surface->xSurficies, model_surfaces_for_lod.data(),
+				new_model_surface->surfs = new XSurface[model_surfaces_for_lod.size()];
+				memcpy(new_model_surface->surfs, model_surfaces_for_lod.data(),
 				       sizeof(XSurface) * model_surfaces_for_lod.size());
 
 				// patch surfaces ptr
@@ -639,9 +393,14 @@ size(), asset->numSurfaces, asset->name);
 
 				if (new_model)
 				{
-					// dump attachment-less xmodel
-					dump_internal(new_model, convertToString);
+					const auto iw5_model = new IW5::XModel;
+					memcpy(iw5_model, new_model, sizeof XModel);
+					iw5_model->unk = 0;
+					
+					IW5::IXModel::dump(iw5_model, convertToString);
 
+					delete iw5_model;
+					
 					// dump the XSurfaces
 					for (auto lod = 0; lod < 4; lod++)
 					{
@@ -653,16 +412,14 @@ size(), asset->numSurfaces, asset->name);
 				}
 			}
 
+			const auto iw5_model = new IW5::XModel;
+			memcpy(iw5_model, asset, sizeof XModel);
+			iw5_model->unk = 0;
+			
 			// dump regular xmodel
-			dump_internal(asset, convertToString);
-		}
+			IW5::IXModel::dump(iw5_model, convertToString);
 
-		IXModel::IXModel()
-		{
-		}
-
-		IXModel::~IXModel()
-		{
+			delete iw5_model;
 		}
 	}
 }
